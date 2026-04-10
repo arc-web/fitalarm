@@ -1597,166 +1597,367 @@ function renderHistoryScreen() {
 // POSE TRACKER (squats & push-ups)
 // ────────────────────────────────────────────────
 const PoseTracker = {
-  detector: null,
-  stream:   null,
-  animId:   null,
-  repCount: 0,
-  isDown:   false,
-  onRep:    null,
-  type:     null,
+  // state
+  detector:      null,
+  stream:        null,
+  running:       false,
+  repCount:      0,
+  isDown:        false,
+  onRep:         null,
+  type:          null,
+  lastPose:      null,
+  prevKps:       null,
+  lastMovedAt:   0,
+  // timers
+  detectTimer:   null,
+  drawId:        null,
+  inactivityId:  null,
 
-  async load() {
+  // ── Lazy-load TF.js scripts once ──────────────────────────────────────
+  async _loadScripts() {
     if (window.poseDetection) return true;
-    // Lazily load TF.js + pose-detection from CDN
-    const scripts = [
+    const urls = [
       'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@4.2.0/dist/tf-core.min.js',
       'https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-backend-webgl@4.2.0/dist/tf-backend-webgl.min.js',
       'https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.0/dist/pose-detection.min.js',
     ];
-    for (const src of scripts) {
-      await new Promise((res, rej) => {
+    for (const src of urls) {
+      await new Promise((ok, fail) => {
         const s = document.createElement('script');
         s.src = src; s.crossOrigin = 'anonymous';
-        s.onload = res; s.onerror = rej;
+        s.onload = ok; s.onerror = fail;
         document.head.appendChild(s);
       });
     }
     return !!window.poseDetection;
   },
 
+  // ── Entry point ────────────────────────────────────────────────────────
   async start(type, onRep) {
-    this.type = type; this.onRep = onRep;
-    this.repCount = 0; this.isDown = false;
-    const statusEl = document.getElementById('pose-status');
-    const set = (msg) => { if (statusEl) { statusEl.style.display = 'block'; statusEl.textContent = msg; } };
+    this.type      = type;
+    this.onRep     = onRep;
+    this.repCount  = 0;
+    this.isDown    = false;
+    this.running   = true;
+    this.lastMovedAt = Date.now();
+    this.prevKps   = null;
+    this.lastPose  = null;
 
-    // Camera
+    const status = (msg, col) => {
+      const el = document.getElementById('pose-status');
+      if (!el) return;
+      el.style.display = 'block';
+      el.textContent = msg;
+      el.style.color = col || '#fff';
+    };
+
+    // ── Camera ──────────────────────────────────────────────────────────
     try {
-      this.stream = await navigator.mediaDevices.getUserMedia(
-        { video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } } }
-      );
+      this.stream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }
+      });
       const vid = document.getElementById('pose-video');
       vid.srcObject = this.stream;
       await new Promise(r => { vid.onloadedmetadata = r; });
       await vid.play();
     } catch(e) {
-      set('❌ Camera permission denied');
+      status('❌ Camera permission denied', '#ff3b5c');
       return false;
     }
 
-    // Load model
-    set('⏳ Loading pose model (first time is slow)...');
+    // ── Load MoveNet ─────────────────────────────────────────────────────
+    status('⏳ Loading pose model…');
     try {
-      await this.load();
+      await this._loadScripts();
+      await window.tf.ready();
       await window.tf.setBackend('webgl');
       this.detector = await window.poseDetection.createDetector(
         window.poseDetection.SupportedModels.MoveNet,
         { modelType: window.poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING }
       );
-      set('✅ Ready! Get in position...');
-      setTimeout(() => { if (statusEl) statusEl.style.display = 'none'; }, 2500);
+      status('✅ Ready — get into position!', '#00e87a');
+      setTimeout(() => {
+        const el = document.getElementById('pose-status');
+        if (el) el.style.display = 'none';
+      }, 2500);
     } catch(e) {
-      set('⚠️ Pose model failed to load — count manually and tap Complete');
-      return false;
+      status('⚠️ Pose model unavailable — count manually, tap Complete when done', '#ffaa00');
+      // Still start the inactivity watch even without the model
     }
 
-    this._loop();
+    this._startDetectLoop();
+    this._startDrawLoop();
+    this._startInactivityWatch();
     return true;
   },
 
-  _loop() {
-    this.animId = requestAnimationFrame(async () => {
-      if (!this.stream) return;
+  // ── Detection loop — controlled at ~12 fps (80 ms between calls) ───────
+  // Using setTimeout instead of rAF so async inference never stacks up.
+  _startDetectLoop() {
+    const tick = async () => {
+      if (!this.running) return;
       await this._detect();
-      this._loop();
-    });
+      if (this.running) this.detectTimer = setTimeout(tick, 80);
+    };
+    tick();
   },
 
   async _detect() {
-    if (!this.detector) return;
+    if (!this.detector || !this.stream) return;
     const vid = document.getElementById('pose-video');
     if (!vid || vid.readyState < 2) return;
     try {
       const poses = await this.detector.estimatePoses(vid);
-      if (poses[0]) { this._draw(poses[0]); this._count(poses[0]); }
+      if (poses[0]) {
+        this.lastPose = poses[0];
+        this._trackMovement(poses[0]);
+        this._count(poses[0]);
+      }
     } catch(_) {}
+  },
+
+  // ── Draw loop — runs at rAF for smooth skeleton overlay ────────────────
+  _startDrawLoop() {
+    const draw = () => {
+      if (!this.running) return;
+      if (this.lastPose) this._draw(this.lastPose);
+      this.drawId = requestAnimationFrame(draw);
+    };
+    this.drawId = requestAnimationFrame(draw);
+  },
+
+  // ── Inactivity watch — checks every second, alarms at 60 s idle ────────
+  _startInactivityWatch() {
+    clearInterval(this.inactivityId);
+    this.inactivityId = setInterval(() => {
+      if (!this.running) return;
+      const idle = Date.now() - this.lastMovedAt;
+      const el   = document.getElementById('pose-status');
+
+      if (idle >= 60000) {
+        // Reset clock so it doesn't fire every second
+        this.lastMovedAt = Date.now();
+        // Re-trigger alarm
+        if (!Audio.isRunning) Audio.start();
+        else Audio.resumeSound();
+        Audio.isMuted = false;
+        // Update sound indicator
+        const si = document.getElementById('camera-sound-indicator');
+        if (si) {
+          si.classList.remove('paused');
+          si.innerHTML = '<div class="sound-dot"></div><span>Alarm Active</span>';
+          document.getElementById('btn-pause-sound-camera').textContent = '🔇 Pause Alarm Sound';
+        }
+        showToast('No movement for 1 min — alarm re-triggered!', 4000);
+        if (el) {
+          el.style.display = 'block';
+          el.textContent   = '🚨 Inactivity detected — alarm triggered!';
+          el.style.color   = '#ff3b5c';
+          setTimeout(() => { if (el) el.style.display = 'none'; }, 4000);
+        }
+      } else if (idle >= 45000) {
+        const left = Math.ceil((60000 - idle) / 1000);
+        if (el) {
+          el.style.display = 'block';
+          el.textContent   = `⚠️ No movement — alarm re-triggers in ${left}s`;
+          el.style.color   = '#ffaa00';
+        }
+      } else {
+        if (el && el.textContent.includes('movement')) el.style.display = 'none';
+      }
+    }, 1000);
+  },
+
+  // ── Movement tracker — updates lastMovedAt when body moves ─────────────
+  _trackMovement(pose) {
+    if (!this.prevKps) {
+      this.prevKps = pose.keypoints.map(k => ({ x: k.x, y: k.y, score: k.score }));
+      return;
+    }
+    let total = 0, count = 0;
+    pose.keypoints.forEach((kp, i) => {
+      const prev = this.prevKps[i];
+      if (kp.score > 0.25 && prev.score > 0.25) {
+        total += Math.hypot(kp.x - prev.x, kp.y - prev.y);
+        count++;
+      }
+    });
+    // Any average keypoint displacement > 3 px counts as movement
+    if (count > 0 && total / count > 3) this.lastMovedAt = Date.now();
+    this.prevKps = pose.keypoints.map(k => ({ x: k.x, y: k.y, score: k.score }));
+  },
+
+  // ── Helpers ────────────────────────────────────────────────────────────
+  _kp(pose, name) { return pose.keypoints.find(k => k.name === name); },
+
+  // Always pick the side with the higher confidence score
+  _best(pose, lName, rName) {
+    const L = this._kp(pose, lName);
+    const R = this._kp(pose, rName);
+    if (!L) return R;
+    if (!R) return L;
+    return (L.score >= R.score) ? L : R;
   },
 
   _angle(a, b, c) {
     const ab = { x: a.x - b.x, y: a.y - b.y };
     const cb = { x: c.x - b.x, y: c.y - b.y };
-    const dot = ab.x*cb.x + ab.y*cb.y;
+    const dot = ab.x * cb.x + ab.y * cb.y;
     const mag = Math.hypot(ab.x, ab.y) * Math.hypot(cb.x, cb.y);
-    return mag ? Math.acos(Math.max(-1, Math.min(1, dot/mag))) * (180/Math.PI) : 0;
+    return mag ? Math.acos(Math.max(-1, Math.min(1, dot / mag))) * (180 / Math.PI) : 0;
   },
 
-  _kp(pose, name) { return pose.keypoints.find(k => k.name === name); },
+  // ── Rep counting ────────────────────────────────────────────────────────
+  // Pick the SAME side for all three joints (whichever side has the higher
+  // combined confidence score) — mixing sides produces a nonsensical angle.
+  _bestSide(pose, lNames, rNames) {
+    let lSum = 0, rSum = 0;
+    lNames.forEach(n => { lSum += (this._kp(pose, n)?.score || 0); });
+    rNames.forEach(n => { rSum += (this._kp(pose, n)?.score || 0); });
+    const useLeft = lSum >= rSum;
+    return (useLeft ? lNames : rNames).map(n => this._kp(pose, n));
+  },
 
   _count(pose) {
-    const C = 0.3; // min confidence
+    const MIN_CONF = 0.25;
+
     if (this.type === 'squats') {
-      const H = this._kp(pose,'left_hip')   || this._kp(pose,'right_hip');
-      const K = this._kp(pose,'left_knee')  || this._kp(pose,'right_knee');
-      const A = this._kp(pose,'left_ankle') || this._kp(pose,'right_ankle');
-      if (!H||!K||!A||H.score<C||K.score<C||A.score<C) return;
+      // Use same side: whichever of left/right has higher total confidence
+      const [H, K, A] = this._bestSide(pose,
+        ['left_hip',  'left_knee',  'left_ankle'],
+        ['right_hip', 'right_knee', 'right_ankle']
+      );
+      if (!H || !K || !A) return;
+      if (H.score < MIN_CONF || K.score < MIN_CONF || A.score < MIN_CONF) return;
+
       const ang = this._angle(H, K, A);
-      if (ang < 100 && !this.isDown) this.isDown = true;
-      else if (ang > 155 && this.isDown) { this.isDown = false; this._rep(); }
+      this._updateBadge(this.isDown ? 'down' : 'up', ang);
+
+      // DOWN: knee bends past 120°  |  UP: knee straightens past 158°
+      if (!this.isDown && ang < 120) {
+        this.isDown = true;
+      } else if (this.isDown && ang > 158) {
+        this.isDown = false;
+        this._rep();
+      }
     }
+
     if (this.type === 'pushups') {
-      const SH = this._kp(pose,'left_shoulder') || this._kp(pose,'right_shoulder');
-      const EL = this._kp(pose,'left_elbow')    || this._kp(pose,'right_elbow');
-      const WR = this._kp(pose,'left_wrist')    || this._kp(pose,'right_wrist');
-      if (!SH||!EL||!WR||SH.score<C||EL.score<C||WR.score<C) return;
+      // Use same side for shoulder-elbow-wrist
+      const [SH, EL, WR] = this._bestSide(pose,
+        ['left_shoulder',  'left_elbow',  'left_wrist'],
+        ['right_shoulder', 'right_elbow', 'right_wrist']
+      );
+      if (!SH || !EL || !WR) return;
+      if (SH.score < MIN_CONF || EL.score < MIN_CONF || WR.score < MIN_CONF) return;
+
       const ang = this._angle(SH, EL, WR);
-      if (ang < 90 && !this.isDown) this.isDown = true;
-      else if (ang > 150 && this.isDown) { this.isDown = false; this._rep(); }
+      this._updateBadge(this.isDown ? 'down' : 'up', ang);
+
+      // DOWN: elbow bends past 105°  |  UP: arm extends past 150°
+      if (!this.isDown && ang < 105) {
+        this.isDown = true;
+      } else if (this.isDown && ang > 150) {
+        this.isDown = false;
+        this._rep();
+      }
     }
   },
 
+  // ── Rep registered ──────────────────────────────────────────────────────
   _rep() {
     this.repCount++;
+    this.lastMovedAt = Date.now();
     if (this.onRep) this.onRep(this.repCount);
+    // Flash the rep counter green + scale
+    const el = document.getElementById('camera-rep-count');
+    if (el) {
+      el.style.transition = 'transform 0.12s ease, color 0.12s ease';
+      el.style.transform  = 'scale(1.3)';
+      el.style.color      = 'var(--accent)';
+      setTimeout(() => { el.style.transform = 'scale(1)'; el.style.color = ''; }, 280);
+    }
   },
 
+  // ── DOWN / UP badge on the camera feed ─────────────────────────────────
+  _updateBadge(state, angle) {
+    const badge = document.getElementById('pose-state-badge');
+    if (!badge) return;
+    badge.style.display = 'block';
+    if (state === 'down') {
+      badge.style.color      = '#ff3b5c';
+      badge.style.background = 'rgba(0,0,0,0.75)';
+      badge.textContent      = `⬇ DOWN  ${Math.round(angle)}°`;
+    } else {
+      badge.style.color      = '#00e87a';
+      badge.style.background = 'rgba(0,0,0,0.75)';
+      badge.textContent      = `⬆ UP  ${Math.round(angle)}°`;
+    }
+  },
+
+  // ── Skeleton draw — runs at rAF rate from lastPose ─────────────────────
   _draw(pose) {
-    const vid = document.getElementById('pose-video');
+    const vid    = document.getElementById('pose-video');
     const canvas = document.getElementById('pose-canvas');
     if (!vid || !canvas) return;
-    canvas.width = vid.videoWidth; canvas.height = vid.videoHeight;
+
+    if (canvas.width !== vid.videoWidth)  canvas.width  = vid.videoWidth;
+    if (canvas.height !== vid.videoHeight) canvas.height = vid.videoHeight;
     const ctx = canvas.getContext('2d');
     ctx.clearRect(0, 0, canvas.width, canvas.height);
-    const C = 0.3;
+
+    const C = 0.28;
     const links = [
-      ['left_shoulder','right_shoulder'],
-      ['left_shoulder','left_elbow'],['left_elbow','left_wrist'],
-      ['right_shoulder','right_elbow'],['right_elbow','right_wrist'],
-      ['left_shoulder','left_hip'],['right_shoulder','right_hip'],
-      ['left_hip','right_hip'],
-      ['left_hip','left_knee'],['left_knee','left_ankle'],
-      ['right_hip','right_knee'],['right_knee','right_ankle'],
+      ['left_shoulder', 'right_shoulder'],
+      ['left_shoulder', 'left_elbow'],  ['left_elbow',  'left_wrist'],
+      ['right_shoulder','right_elbow'], ['right_elbow', 'right_wrist'],
+      ['left_shoulder', 'left_hip'],    ['right_shoulder','right_hip'],
+      ['left_hip',      'right_hip'],
+      ['left_hip',      'left_knee'],   ['left_knee',   'left_ankle'],
+      ['right_hip',     'right_knee'],  ['right_knee',  'right_ankle'],
     ];
-    ctx.strokeStyle = 'rgba(0,255,136,0.85)'; ctx.lineWidth = 3;
-    links.forEach(([a,b]) => {
-      const kA = this._kp(pose,a), kB = this._kp(pose,b);
-      if (kA&&kB&&kA.score>C&&kB.score>C) {
-        ctx.beginPath(); ctx.moveTo(kA.x,kA.y); ctx.lineTo(kB.x,kB.y); ctx.stroke();
+
+    // Bones
+    ctx.lineWidth   = 3;
+    ctx.strokeStyle = 'rgba(0,232,122,0.85)';
+    links.forEach(([a, b]) => {
+      const kA = this._kp(pose, a), kB = this._kp(pose, b);
+      if (kA && kB && kA.score > C && kB.score > C) {
+        ctx.beginPath(); ctx.moveTo(kA.x, kA.y); ctx.lineTo(kB.x, kB.y); ctx.stroke();
       }
     });
+
+    // Joints — highlight the ones used for counting
+    const active = this.type === 'squats'
+      ? ['left_hip','right_hip','left_knee','right_knee','left_ankle','right_ankle']
+      : ['left_shoulder','right_shoulder','left_elbow','right_elbow','left_wrist','right_wrist'];
+
     pose.keypoints.forEach(k => {
-      if (k.score > C) {
-        ctx.beginPath(); ctx.arc(k.x,k.y,5,0,2*Math.PI);
-        ctx.fillStyle = '#00ff88'; ctx.fill();
+      if (k.score < C) return;
+      const isActive = active.includes(k.name);
+      ctx.beginPath();
+      ctx.arc(k.x, k.y, isActive ? 7 : 4, 0, 2 * Math.PI);
+      ctx.fillStyle = isActive ? '#00e87a' : 'rgba(255,255,255,0.5)';
+      ctx.fill();
+      if (isActive) {
+        ctx.strokeStyle = 'rgba(0,0,0,0.4)'; ctx.lineWidth = 1.5;
+        ctx.stroke();
       }
     });
   },
 
+  // ── Cleanup ────────────────────────────────────────────────────────────
   stop() {
-    if (this.animId) cancelAnimationFrame(this.animId);
+    this.running = false;
+    clearTimeout(this.detectTimer);
+    clearInterval(this.inactivityId);
+    if (this.drawId) cancelAnimationFrame(this.drawId);
     if (this.stream) { this.stream.getTracks().forEach(t => t.stop()); this.stream = null; }
     const vid = document.getElementById('pose-video');
     if (vid) vid.srcObject = null;
-    this.detector = null; this.animId = null;
+    const badge = document.getElementById('pose-state-badge');
+    if (badge) badge.style.display = 'none';
+    this.detector = null; this.drawId = null; this.detectTimer = null; this.inactivityId = null;
   },
 };
 
