@@ -562,7 +562,7 @@
     <div style="position:relative;width:100%;aspect-ratio:4/3;border-radius:var(--radius);overflow:hidden;background:#111;flex-shrink:0;">
       <video id="pose-video" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;transform:scaleX(-1);"></video>
       <!-- Mic status pill -->
-      <div id="pose-status" style="position:absolute;bottom:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.80);border-radius:99px;padding:7px 16px;font-size:12px;color:#fff;font-weight:600;white-space:nowrap;display:none;"></div>
+      <div id="pose-status" style="position:absolute;bottom:10px;left:10px;right:10px;background:rgba(0,0,0,0.80);border-radius:99px;padding:7px 16px;font-size:12px;color:#fff;font-weight:600;text-align:center;display:none;"></div>
     </div>
 
     <!-- Rep counter -->
@@ -1519,11 +1519,9 @@ document.getElementById('btn-pause-sound-camera').addEventListener('click', asyn
 });
 
 // Camera screen — Manual +1 Rep button (fallback when mic unavailable)
+// _rep() already calls onRep which updates the display and checks completion.
 document.getElementById('btn-manual-rep').addEventListener('click', () => {
-  VoiceCounter._rep();
-  const reps = VoiceCounter.repCount;
-  document.getElementById('camera-rep-count').textContent = reps;
-  if (reps >= S.targetValue) completeActivity(false);
+  if (VoiceCounter.running) VoiceCounter._rep();
 });
 
 // Camera screen — Mark Complete (goes through 3-step confirm)
@@ -1653,13 +1651,59 @@ const VoiceCounter = {
   },
 
   // ── Entry point ────────────────────────────────────────────────────────
+  // IMPORTANT: SpeechRecognition must be started SYNCHRONOUSLY before any
+  // await — iOS Safari requires it to be in the original user-gesture call
+  // stack. Camera setup (which uses await) happens after.
   async start(type, onRep) {
     this.onRep        = onRep;
     this.repCount     = 0;
     this.running      = true;
     this.lastSpokenAt = Date.now();
 
-    // ── Camera (self-view only — no pose detection) ──────────────────────
+    // ── Speech Recognition — MUST happen before any await ────────────────
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if (!SR) {
+      this._status('⚠️ Voice not supported — use the +1 Rep button', '#ffaa00');
+    } else {
+      const rec = new SR();
+      rec.continuous      = true;
+      rec.interimResults  = false;
+      rec.lang            = 'en-US';
+      rec.maxAlternatives = 1;
+      this.recognition    = rec;
+
+      rec.onresult = (event) => {
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          if (!event.results[i].isFinal) continue;
+          const transcript = event.results[i][0].transcript;
+          if (this._hasNumber(transcript)) {
+            this.lastSpokenAt = Date.now();
+            this._rep();
+          }
+        }
+      };
+
+      rec.onerror = (e) => {
+        if (e.error === 'no-speech' || e.error === 'aborted') return;
+        this._status('🎤 Mic error — say numbers or tap +1 Rep', '#ffaa00');
+      };
+
+      // Auto-restart with small delay to avoid rapid-spin loop on iOS
+      rec.onend = () => {
+        if (this.running) {
+          setTimeout(() => { try { rec.start(); } catch(_) {} }, 150);
+        }
+      };
+
+      try {
+        rec.start();
+        this._status('🎤 Listening — say a number after each rep!', '#00e87a', 3000);
+      } catch(e) {
+        this._status('⚠️ Mic unavailable — use the +1 Rep button', '#ffaa00');
+      }
+    }
+
+    // ── Camera (self-view only) — async, after recognition is started ─────
     try {
       this.stream = await navigator.mediaDevices.getUserMedia({
         video: { facingMode: 'user', width: { ideal: 640 }, height: { ideal: 480 } }
@@ -1669,52 +1713,7 @@ const VoiceCounter = {
       await new Promise(r => { vid.onloadedmetadata = r; });
       await vid.play();
     } catch(e) {
-      // Camera denied — that's OK, voice still works
-    }
-
-    // ── Speech Recognition ────────────────────────────────────────────────
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SR) {
-      this._status('⚠️ Voice not supported — use the +1 Rep button', '#ffaa00');
-      this._startInactivityWatch();
-      return true;
-    }
-
-    const rec = new SR();
-    rec.continuous      = true;
-    rec.interimResults  = false;
-    rec.lang            = 'en-US';
-    rec.maxAlternatives = 1;
-    this.recognition    = rec;
-
-    rec.onresult = (event) => {
-      for (let i = event.resultIndex; i < event.results.length; i++) {
-        if (!event.results[i].isFinal) continue;
-        const transcript = event.results[i][0].transcript;
-        if (this._hasNumber(transcript)) {
-          this.lastSpokenAt = Date.now();
-          this._rep();
-        }
-      }
-    };
-
-    rec.onerror = (e) => {
-      if (e.error === 'no-speech' || e.error === 'aborted') return;
-      this._status('🎤 Mic error — say numbers or tap +1 Rep', '#ffaa00');
-    };
-
-    // Auto-restart after silence timeout or network blip
-    rec.onend = () => {
-      if (this.running) {
-        try { rec.start(); } catch(_) {}
-      }
-    };
-
-    try {
-      rec.start();
-      this._status('🎤 Listening — say a number after each rep!', '#00e87a', 3000);
-    } catch(e) {
-      this._status('⚠️ Mic unavailable — use the +1 Rep button', '#ffaa00');
+      // Camera denied — voice still works fine
     }
 
     this._startInactivityWatch();
