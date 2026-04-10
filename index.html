@@ -1,0 +1,1324 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="theme-color" content="#0a0a0f" />
+  <title>FitAlarm</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #0a0a0f;
+      --surface: #13131a;
+      --border: #2a2a3a;
+      --accent: #00ff88;
+      --accent-dim: #00cc6a;
+      --danger: #ff3b5c;
+      --danger-dim: #cc2d48;
+      --warn: #ffaa00;
+      --text: #e8e8f0;
+      --text-muted: #7a7a9a;
+      --radius: 16px;
+      --radius-sm: 10px;
+    }
+
+    html, body {
+      height: 100%;
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      -webkit-font-smoothing: antialiased;
+      overflow: hidden;
+    }
+
+    #app {
+      position: relative;
+      width: 100%;
+      height: 100dvh;
+    }
+
+    .screen {
+      display: none;
+      position: absolute;
+      inset: 0;
+      padding: env(safe-area-inset-top, 20px) 24px env(safe-area-inset-bottom, 20px);
+      overflow-y: auto;
+      flex-direction: column;
+    }
+    .screen.active { display: flex; }
+
+    /* ─── SHARED COMPONENTS ─── */
+    .screen-header {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 16px 0 8px;
+    }
+    .screen-title {
+      font-size: 22px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+    .logo-icon { font-size: 26px; }
+
+    .btn {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      width: 100%;
+      padding: 18px 24px;
+      border-radius: var(--radius);
+      border: none;
+      font-size: 17px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.1s, opacity 0.1s;
+      -webkit-tap-highlight-color: transparent;
+      min-height: 58px;
+    }
+    .btn:active { transform: scale(0.97); opacity: 0.85; }
+    .btn-primary { background: var(--accent); color: #000; }
+    .btn-danger  { background: var(--danger); color: #fff; }
+    .btn-warn    { background: var(--warn); color: #000; }
+    .btn-outline {
+      background: transparent;
+      border: 2px solid var(--border);
+      color: var(--text);
+    }
+    .btn-ghost {
+      background: var(--surface);
+      color: var(--text);
+    }
+    .btn-sm {
+      font-size: 15px;
+      padding: 14px 20px;
+      min-height: 48px;
+    }
+
+    .card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+    }
+
+    label {
+      display: block;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 8px;
+    }
+
+    input[type="number"], input[type="time"] {
+      width: 100%;
+      background: var(--bg);
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font-size: 20px;
+      font-weight: 600;
+      padding: 14px 16px;
+      outline: none;
+      transition: border-color 0.2s;
+      -webkit-appearance: none;
+      appearance: none;
+    }
+    input[type="number"]:focus,
+    input[type="time"]:focus { border-color: var(--accent); }
+    input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(1); opacity: 0.4; }
+
+    .spacer { flex: 1; }
+    .gap-12 { display: flex; flex-direction: column; gap: 12px; }
+    .gap-16 { display: flex; flex-direction: column; gap: 16px; }
+    .gap-20 { display: flex; flex-direction: column; gap: 20px; }
+
+    /* ─── SETUP SCREEN ─── */
+    #screen-setup .activity-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+    }
+    .activity-btn {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      padding: 16px 8px;
+      background: var(--bg);
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text-muted);
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: border-color 0.2s, color 0.2s, background 0.2s;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .activity-btn .icon { font-size: 28px; }
+    .activity-btn.selected {
+      border-color: var(--accent);
+      color: var(--accent);
+      background: rgba(0, 255, 136, 0.06);
+    }
+
+    /* ─── STANDBY SCREEN ─── */
+    #screen-standby {
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      gap: 0;
+    }
+    #screen-standby .alarm-label {
+      font-size: 14px;
+      color: var(--text-muted);
+      font-weight: 600;
+      letter-spacing: 2px;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+    }
+    #screen-standby .alarm-time-big {
+      font-size: 64px;
+      font-weight: 800;
+      letter-spacing: -3px;
+      color: var(--text);
+      margin-bottom: 4px;
+    }
+    #screen-standby .activity-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 99px;
+      padding: 6px 16px;
+      font-size: 14px;
+      color: var(--text-muted);
+      margin-bottom: 48px;
+    }
+    .countdown-label {
+      font-size: 13px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      margin-bottom: 8px;
+    }
+    #countdown-display {
+      font-size: 44px;
+      font-weight: 700;
+      color: var(--accent);
+      letter-spacing: -2px;
+      font-variant-numeric: tabular-nums;
+    }
+    #screen-standby .edit-btn {
+      margin-top: 48px;
+      width: auto;
+      padding: 12px 28px;
+      font-size: 14px;
+    }
+
+    /* ─── ALARMING SCREEN ─── */
+    #screen-alarming {
+      background: var(--bg);
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      gap: 0;
+    }
+    .alarm-pulse-ring {
+      position: relative;
+      width: 200px;
+      height: 200px;
+      margin: 0 auto 32px;
+    }
+    .alarm-pulse-ring::before,
+    .alarm-pulse-ring::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      border-radius: 50%;
+      background: rgba(255, 59, 92, 0.15);
+      animation: pulse-ring 1.4s ease-out infinite;
+    }
+    .alarm-pulse-ring::after { animation-delay: 0.7s; }
+    .alarm-pulse-center {
+      position: absolute;
+      inset: 20px;
+      border-radius: 50%;
+      background: var(--danger);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 56px;
+      animation: pulse-center 1.4s ease-in-out infinite;
+    }
+    @keyframes pulse-ring {
+      0%   { transform: scale(0.8); opacity: 0.8; }
+      100% { transform: scale(1.4); opacity: 0; }
+    }
+    @keyframes pulse-center {
+      0%, 100% { transform: scale(1); }
+      50%       { transform: scale(1.05); }
+    }
+    .alarm-title {
+      font-size: 28px;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+    .alarm-subtitle {
+      font-size: 16px;
+      color: var(--text-muted);
+      margin-bottom: 40px;
+    }
+    #screen-alarming .actions {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    /* ─── ACTIVE SCREEN ─── */
+    #screen-active {
+      align-items: center;
+      gap: 0;
+    }
+    #screen-active .screen-header { width: 100%; }
+    .progress-ring-wrap {
+      position: relative;
+      width: 220px;
+      height: 220px;
+      margin: 24px auto 16px;
+    }
+    .progress-ring-wrap svg {
+      transform: rotate(-90deg);
+    }
+    .progress-ring-bg { fill: none; stroke: var(--border); stroke-width: 10; }
+    .progress-ring-fill {
+      fill: none;
+      stroke: var(--accent);
+      stroke-width: 10;
+      stroke-linecap: round;
+      transition: stroke-dashoffset 1s linear;
+    }
+    .progress-center-text {
+      position: absolute;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .progress-value {
+      font-size: 40px;
+      font-weight: 800;
+      letter-spacing: -2px;
+      color: var(--text);
+    }
+    .progress-unit {
+      font-size: 14px;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+    .progress-target {
+      font-size: 13px;
+      color: var(--text-muted);
+      margin-bottom: 24px;
+    }
+    .stats-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      width: 100%;
+      margin-bottom: 20px;
+    }
+    .stat-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      padding: 14px;
+      text-align: center;
+    }
+    .stat-value {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--text);
+      font-variant-numeric: tabular-nums;
+    }
+    .stat-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 600;
+      margin-top: 2px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+    #screen-active .bottom-actions {
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      margin-top: auto;
+    }
+    .sound-indicator {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      background: rgba(255, 59, 92, 0.1);
+      border: 1px solid rgba(255, 59, 92, 0.3);
+      border-radius: 99px;
+      padding: 8px 16px;
+      font-size: 13px;
+      color: var(--danger);
+      font-weight: 600;
+    }
+    .sound-indicator.paused {
+      background: rgba(255, 170, 0, 0.1);
+      border-color: rgba(255, 170, 0, 0.3);
+      color: var(--warn);
+    }
+    .sound-dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: currentColor;
+      animation: blink 1s infinite;
+    }
+    .sound-indicator.paused .sound-dot { animation: none; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+
+    /* ─── COMPLETE SCREEN ─── */
+    #screen-complete {
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      gap: 0;
+      overflow: hidden;
+    }
+    .confetti-wrap {
+      font-size: 72px;
+      margin-bottom: 16px;
+      animation: pop-in 0.4s cubic-bezier(0.34,1.56,0.64,1) both;
+    }
+    @keyframes pop-in {
+      from { transform: scale(0); opacity: 0; }
+      to   { transform: scale(1); opacity: 1; }
+    }
+    .complete-title {
+      font-size: 32px;
+      font-weight: 800;
+      margin-bottom: 8px;
+    }
+    .complete-sub {
+      font-size: 16px;
+      color: var(--text-muted);
+      margin-bottom: 32px;
+    }
+    .complete-stats {
+      display: flex;
+      gap: 24px;
+      margin-bottom: 40px;
+    }
+    .complete-stat {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+    .complete-stat-value {
+      font-size: 32px;
+      font-weight: 800;
+      color: var(--accent);
+    }
+    .complete-stat-label {
+      font-size: 13px;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+    #screen-complete .btn { max-width: 320px; }
+
+    /* ─── TOAST ─── */
+    #toast {
+      position: fixed;
+      bottom: calc(env(safe-area-inset-bottom, 20px) + 20px);
+      left: 50%;
+      transform: translateX(-50%) translateY(80px);
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 99px;
+      padding: 12px 20px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text);
+      white-space: nowrap;
+      transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s;
+      opacity: 0;
+      pointer-events: none;
+      z-index: 999;
+    }
+    #toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 0; }
+  </style>
+</head>
+<body>
+<div id="app">
+
+  <!-- ══════════════ SETUP SCREEN ══════════════ -->
+  <div class="screen active" id="screen-setup">
+    <div class="screen-header">
+      <span class="logo-icon">⚡</span>
+      <span class="screen-title">FitAlarm</span>
+    </div>
+
+    <div class="gap-20" style="margin-top: 12px; flex: 1;">
+
+      <div>
+        <label>Activity Type</label>
+        <div class="activity-grid">
+          <button class="activity-btn selected" data-activity="run">
+            <span class="icon">🏃</span>Run
+          </button>
+          <button class="activity-btn" data-activity="walk">
+            <span class="icon">🚶</span>Walk
+          </button>
+          <button class="activity-btn" data-activity="cycling">
+            <span class="icon">🚴</span>Cycling
+          </button>
+          <button class="activity-btn" data-activity="gym">
+            <span class="icon">🏋️</span>Gym
+          </button>
+        </div>
+      </div>
+
+      <div>
+        <label id="target-label">Distance Goal (km)</label>
+        <input type="number" id="target-input" min="0.1" max="500" step="0.1"
+               value="5" inputmode="decimal" placeholder="5" />
+      </div>
+
+      <div>
+        <label>Alarm Time</label>
+        <input type="time" id="alarm-time-input" value="07:00" />
+      </div>
+
+    </div>
+
+    <div style="margin-top: 24px; padding-bottom: 8px;">
+      <button class="btn btn-primary" id="btn-set-alarm">
+        ⏰ Set Alarm
+      </button>
+    </div>
+  </div>
+
+  <!-- ══════════════ STANDBY SCREEN ══════════════ -->
+  <div class="screen" id="screen-standby">
+    <p class="alarm-label">Alarm Set For</p>
+    <p class="alarm-time-big" id="standby-alarm-time">07:00</p>
+    <div class="activity-badge" id="standby-badge">
+      <span id="standby-icon">🏃</span>
+      <span id="standby-goal-text">5.0 km Run</span>
+    </div>
+    <p class="countdown-label">Starts In</p>
+    <p id="countdown-display">00:00:00</p>
+    <button class="btn btn-outline edit-btn" id="btn-edit-alarm">✏️ Edit Alarm</button>
+  </div>
+
+  <!-- ══════════════ ALARMING SCREEN ══════════════ -->
+  <div class="screen" id="screen-alarming">
+    <div class="alarm-pulse-ring">
+      <div class="alarm-pulse-center">⏰</div>
+    </div>
+    <p class="alarm-title">Time to Move!</p>
+    <p class="alarm-subtitle" id="alarming-goal-text">5.0 km Run — Let's go!</p>
+    <div class="actions">
+      <button class="btn btn-primary" id="btn-start-activity">🏃 Start Activity</button>
+      <button class="btn btn-warn btn-sm" id="btn-pause-sound-alarm">🔇 Pause Sound</button>
+    </div>
+  </div>
+
+  <!-- ══════════════ ACTIVE SCREEN ══════════════ -->
+  <div class="screen" id="screen-active">
+    <div class="screen-header">
+      <span class="logo-icon" id="active-icon">🏃</span>
+      <span class="screen-title" id="active-title">Running</span>
+      <div class="spacer"></div>
+      <div class="sound-indicator" id="sound-indicator">
+        <div class="sound-dot"></div>
+        <span>Alarm Active</span>
+      </div>
+    </div>
+
+    <div class="progress-ring-wrap">
+      <svg width="220" height="220" viewBox="0 0 220 220">
+        <circle class="progress-ring-bg" cx="110" cy="110" r="98"/>
+        <circle class="progress-ring-fill" id="progress-ring" cx="110" cy="110" r="98"
+          stroke-dasharray="615.75"
+          stroke-dashoffset="615.75"/>
+      </svg>
+      <div class="progress-center-text">
+        <span class="progress-value" id="progress-value">0.0</span>
+        <span class="progress-unit" id="progress-unit">km</span>
+      </div>
+    </div>
+
+    <p class="progress-target" id="progress-target">of 5.0 km</p>
+
+    <div class="stats-row">
+      <div class="stat-card">
+        <div class="stat-value" id="stat-elapsed">00:00</div>
+        <div class="stat-label">Elapsed</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-pace">—</div>
+        <div class="stat-label" id="stat-pace-label">Pace</div>
+      </div>
+    </div>
+
+    <div class="bottom-actions">
+      <button class="btn btn-warn btn-sm" id="btn-pause-sound-active">🔇 Pause Alarm Sound</button>
+      <button class="btn btn-primary" id="btn-complete">✅ Mark Complete</button>
+    </div>
+  </div>
+
+  <!-- ══════════════ COMPLETE SCREEN ══════════════ -->
+  <div class="screen" id="screen-complete">
+    <div class="confetti-wrap">🎉</div>
+    <p class="complete-title">Goal Complete!</p>
+    <p class="complete-sub" id="complete-sub">You crushed it!</p>
+    <div class="complete-stats">
+      <div class="complete-stat">
+        <span class="complete-stat-value" id="complete-distance">5.0</span>
+        <span class="complete-stat-label" id="complete-dist-label">km</span>
+      </div>
+      <div class="complete-stat">
+        <span class="complete-stat-value" id="complete-time">—</span>
+        <span class="complete-stat-label">Time</span>
+      </div>
+    </div>
+    <button class="btn btn-primary" id="btn-new-alarm" style="max-width:320px;">⚡ Set New Alarm</button>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+'use strict';
+
+// ────────────────────────────────────────────────
+// CONSTANTS
+// ────────────────────────────────────────────────
+const CIRCUMFERENCE = 2 * Math.PI * 98; // ~615.75
+const INACTIVITY_THRESHOLD_LOW = 0.8;   // m/s² magnitude — below = still
+const INACTIVITY_TIMEOUT_MS = 25000;    // 25s of stillness → resume alarm
+const GPS_MIN_DISTANCE_M = 5;           // ignore GPS jumps < 5m
+const GPS_MAX_ACCURACY_M = 40;          // ignore positions with accuracy > 40m
+
+const ACTIVITY_META = {
+  run:     { icon: '🏃', label: 'Run',     unit: 'km', paceLabel: 'min/km' },
+  walk:    { icon: '🚶', label: 'Walk',    unit: 'km', paceLabel: 'min/km' },
+  cycling: { icon: '🚴', label: 'Cycling', unit: 'km', paceLabel: 'km/h'   },
+  gym:     { icon: '🏋️', label: 'Gym',    unit: 'min', paceLabel: 'Remaining' },
+};
+
+// ────────────────────────────────────────────────
+// APP STATE
+// ────────────────────────────────────────────────
+const S = {
+  // config
+  activityType: 'run',
+  targetValue: 5,
+  alarmTime: '07:00',
+  // runtime
+  currentScreen: 'setup',
+  alarmSoundPaused: false,
+  activityStartTime: null,
+  currentDistance: 0,
+  lastPosition: null,
+  watchId: null,
+  standbyInterval: null,
+  elapsedInterval: null,
+  gymInterval: null,
+  gymSecondsLeft: 0,
+  inactivityCheckInterval: null,
+  lastMotionTime: Date.now(),
+  motionGranted: false,
+  wakeLock: null,
+  silentBuffer: null,
+  silentSource: null,
+};
+
+// ────────────────────────────────────────────────
+// STORAGE
+// ────────────────────────────────────────────────
+const Storage = {
+  save() {
+    try {
+      localStorage.setItem('fitalarm', JSON.stringify({
+        activityType: S.activityType,
+        targetValue: S.targetValue,
+        alarmTime: S.alarmTime,
+      }));
+    } catch(_) {}
+  },
+  load() {
+    try {
+      const d = JSON.parse(localStorage.getItem('fitalarm') || 'null');
+      if (d) {
+        S.activityType = d.activityType || 'run';
+        S.targetValue  = parseFloat(d.targetValue) || 5;
+        S.alarmTime    = d.alarmTime || '07:00';
+      }
+    } catch(_) {}
+  },
+  clear() {
+    try { localStorage.removeItem('fitalarm'); } catch(_) {}
+  },
+};
+
+// ────────────────────────────────────────────────
+// AUDIO ENGINE
+// ────────────────────────────────────────────────
+const Audio = {
+  ctx: null,
+  masterGain: null,
+  beepInterval: null,
+  isRunning: false,
+  silentSrc: null,
+
+  init() {
+    if (this.ctx) return;
+    try {
+      this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      this.masterGain = this.ctx.createGain();
+      this.masterGain.gain.value = 1;
+      this.masterGain.connect(this.ctx.destination);
+      // Start silent loop to keep audio session alive (prevents iOS suspension)
+      this._startSilentLoop();
+    } catch(e) {
+      console.warn('AudioContext failed:', e);
+    }
+  },
+
+  _startSilentLoop() {
+    if (!this.ctx) return;
+    try {
+      const buf = this.ctx.createBuffer(1, this.ctx.sampleRate, this.ctx.sampleRate);
+      this.silentSrc = this.ctx.createBufferSource();
+      this.silentSrc.buffer = buf;
+      this.silentSrc.loop = true;
+      this.silentSrc.connect(this.ctx.destination);
+      this.silentSrc.start();
+    } catch(_) {}
+  },
+
+  async resume() {
+    if (this.ctx && this.ctx.state === 'suspended') {
+      try { await this.ctx.resume(); } catch(_) {}
+    }
+  },
+
+  _beep(freq1 = 880, freq2 = 660, duration = 0.18) {
+    if (!this.ctx || !this.masterGain) return;
+    try {
+      const t = this.ctx.currentTime;
+      [freq1, freq2].forEach((freq, i) => {
+        const osc = this.ctx.createOscillator();
+        const gain = this.ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.value = freq;
+        gain.gain.setValueAtTime(0, t + i * 0.08);
+        gain.gain.linearRampToValueAtTime(0.5, t + i * 0.08 + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + i * 0.08 + duration);
+        osc.connect(gain);
+        gain.connect(this.masterGain);
+        osc.start(t + i * 0.08);
+        osc.stop(t + i * 0.08 + duration + 0.05);
+      });
+    } catch(_) {}
+  },
+
+  start() {
+    if (this.isRunning) return;
+    this.isRunning = true;
+    this.resume();
+    this._beep();
+    this.beepInterval = setInterval(() => {
+      if (this.isRunning && !this.isMuted) this._beep();
+    }, 1200);
+  },
+
+  isMuted: false,
+
+  pauseSound() {
+    this.isMuted = true;
+    if (this.masterGain && this.ctx) {
+      this.masterGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.05);
+    }
+  },
+
+  resumeSound() {
+    this.isMuted = false;
+    if (this.masterGain && this.ctx) {
+      this.masterGain.gain.setTargetAtTime(1, this.ctx.currentTime, 0.05);
+    }
+    if (!this.isRunning) this.start();
+    this.resume();
+  },
+
+  stop() {
+    this.isRunning = false;
+    this.isMuted = false;
+    clearInterval(this.beepInterval);
+    if (this.masterGain && this.ctx) {
+      this.masterGain.gain.setTargetAtTime(0, this.ctx.currentTime, 0.05);
+    }
+    setTimeout(() => {
+      if (this.silentSrc) { try { this.silentSrc.stop(); } catch(_) {} }
+      if (this.ctx) { try { this.ctx.close(); } catch(_) {} }
+      this.ctx = null; this.masterGain = null;
+    }, 500);
+  },
+};
+
+// ────────────────────────────────────────────────
+// GPS TRACKER
+// ────────────────────────────────────────────────
+const GPS = {
+  onUpdate: null,
+
+  start(callback) {
+    this.onUpdate = callback;
+    S.currentDistance = 0;
+    S.lastPosition = null;
+    if (!navigator.geolocation) {
+      showToast('GPS not available in this browser');
+      return;
+    }
+    S.watchId = navigator.geolocation.watchPosition(
+      pos => this._onPos(pos),
+      err => this._onErr(err),
+      { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
+    );
+  },
+
+  stop() {
+    if (S.watchId !== null) {
+      navigator.geolocation.clearWatch(S.watchId);
+      S.watchId = null;
+    }
+  },
+
+  _haversine(lat1, lon1, lat2, lon2) {
+    const R = 6371000; // meters
+    const toRad = d => d * Math.PI / 180;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat/2)**2 +
+              Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLon/2)**2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  },
+
+  _onPos(pos) {
+    const { latitude: lat, longitude: lon, accuracy } = pos.coords;
+    if (accuracy > GPS_MAX_ACCURACY_M) return; // too inaccurate
+    if (S.lastPosition) {
+      const { lat: prevLat, lon: prevLon } = S.lastPosition;
+      const dist = this._haversine(prevLat, prevLon, lat, lon);
+      if (dist >= GPS_MIN_DISTANCE_M) {
+        S.currentDistance += dist / 1000; // to km
+        S.lastPosition = { lat, lon };
+        if (this.onUpdate) this.onUpdate(S.currentDistance);
+      }
+    } else {
+      S.lastPosition = { lat, lon };
+    }
+  },
+
+  _onErr(err) {
+    if (err.code === err.PERMISSION_DENIED) {
+      showToast('GPS permission denied — distance won\'t track');
+    }
+  },
+};
+
+// ────────────────────────────────────────────────
+// MOTION WATCHER (inactivity detection)
+// ────────────────────────────────────────────────
+const Motion = {
+  handler: null,
+  checkInterval: null,
+  onInactive: null,
+
+  async start(callback) {
+    this.onInactive = callback;
+    S.lastMotionTime = Date.now();
+
+    if (typeof DeviceMotionEvent !== 'undefined' &&
+        typeof DeviceMotionEvent.requestPermission === 'function') {
+      try {
+        const perm = await DeviceMotionEvent.requestPermission();
+        if (perm !== 'granted') {
+          this._fallbackVisibility(callback);
+          return;
+        }
+      } catch(_) {
+        this._fallbackVisibility(callback);
+        return;
+      }
+    }
+
+    this.handler = e => {
+      const a = e.accelerationIncludingGravity || e.acceleration;
+      if (!a) return;
+      const mag = Math.sqrt((a.x||0)**2 + (a.y||0)**2 + (a.z||0)**2);
+      if (mag > INACTIVITY_THRESHOLD_LOW) {
+        S.lastMotionTime = Date.now();
+      }
+    };
+    window.addEventListener('devicemotion', this.handler);
+
+    this.checkInterval = setInterval(() => {
+      const still = Date.now() - S.lastMotionTime > INACTIVITY_TIMEOUT_MS;
+      if (still && Audio.isMuted && this.onInactive) {
+        this.onInactive();
+      }
+    }, 5000);
+  },
+
+  _fallbackVisibility(callback) {
+    // If motion not available, resume alarm when page becomes hidden
+    document.addEventListener('visibilitychange', () => {
+      if (document.hidden && Audio.isMuted && callback) callback();
+    });
+  },
+
+  stop() {
+    if (this.handler) window.removeEventListener('devicemotion', this.handler);
+    clearInterval(this.checkInterval);
+    this.handler = null; this.checkInterval = null;
+  },
+};
+
+// ────────────────────────────────────────────────
+// WAKE LOCK
+// ────────────────────────────────────────────────
+async function requestWakeLock() {
+  if ('wakeLock' in navigator) {
+    try {
+      S.wakeLock = await navigator.wakeLock.request('screen');
+    } catch(_) {}
+  }
+}
+function releaseWakeLock() {
+  if (S.wakeLock) { try { S.wakeLock.release(); } catch(_) {} S.wakeLock = null; }
+}
+
+// ────────────────────────────────────────────────
+// ALARM SCHEDULER
+// ────────────────────────────────────────────────
+const Scheduler = {
+  start() {
+    clearInterval(S.standbyInterval);
+    S.standbyInterval = setInterval(() => this._check(), 1000);
+    this._check();
+    this._updateCountdown();
+  },
+
+  _parseTime(hhmm) {
+    const [h, m] = hhmm.split(':').map(Number);
+    return { h, m };
+  },
+
+  _check() {
+    const now = new Date();
+    const { h, m } = this._parseTime(S.alarmTime);
+    if (now.getHours() === h && now.getMinutes() === m && now.getSeconds() < 5) {
+      if (S.currentScreen === 'standby') {
+        clearInterval(S.standbyInterval);
+        triggerAlarm();
+      }
+    }
+    this._updateCountdown();
+  },
+
+  _updateCountdown() {
+    const el = document.getElementById('countdown-display');
+    if (!el) return;
+    const now = new Date();
+    const { h, m } = this._parseTime(S.alarmTime);
+    let target = new Date(now);
+    target.setHours(h, m, 0, 0);
+    if (target <= now) target.setDate(target.getDate() + 1);
+    let diff = Math.floor((target - now) / 1000);
+    const hh = String(Math.floor(diff / 3600)).padStart(2, '0');
+    const mm = String(Math.floor((diff % 3600) / 60)).padStart(2, '0');
+    const ss = String(diff % 60).padStart(2, '0');
+    el.textContent = `${hh}:${mm}:${ss}`;
+  },
+
+  stop() { clearInterval(S.standbyInterval); },
+};
+
+// ────────────────────────────────────────────────
+// ELAPSED TIMER
+// ────────────────────────────────────────────────
+function startElapsedTimer() {
+  S.activityStartTime = Date.now();
+  clearInterval(S.elapsedInterval);
+  S.elapsedInterval = setInterval(() => {
+    const secs = Math.floor((Date.now() - S.activityStartTime) / 1000);
+    const mm = String(Math.floor(secs / 60)).padStart(2, '0');
+    const ss = String(secs % 60).padStart(2, '0');
+    document.getElementById('stat-elapsed').textContent = `${mm}:${ss}`;
+
+    // Pace calculation
+    const elapsedMin = secs / 60;
+    if (S.activityType === 'cycling') {
+      const kmh = S.currentDistance > 0 ? (S.currentDistance / (secs / 3600)).toFixed(1) : '—';
+      document.getElementById('stat-pace').textContent = kmh !== '—' ? kmh : '—';
+    } else if (S.activityType !== 'gym') {
+      const pace = S.currentDistance > 0
+        ? (elapsedMin / S.currentDistance).toFixed(1)
+        : '—';
+      document.getElementById('stat-pace').textContent = pace !== '—' ? `${pace}` : '—';
+    }
+  }, 1000);
+}
+
+function startGymTimer() {
+  S.gymSecondsLeft = S.targetValue * 60;
+  S.activityStartTime = Date.now();
+  document.getElementById('progress-value').textContent = S.targetValue.toString();
+  document.getElementById('stat-pace-label').textContent = 'Remaining';
+  clearInterval(S.gymInterval);
+  S.gymInterval = setInterval(() => {
+    S.gymSecondsLeft -= 1;
+    const elapsed = Math.floor((Date.now() - S.activityStartTime) / 1000);
+    const em = String(Math.floor(elapsed / 60)).padStart(2, '0');
+    const es = String(elapsed % 60).padStart(2, '0');
+    document.getElementById('stat-elapsed').textContent = `${em}:${es}`;
+
+    const minsLeft = Math.ceil(S.gymSecondsLeft / 60);
+    document.getElementById('stat-pace').textContent = `${minsLeft}m`;
+
+    const pct = 1 - (S.gymSecondsLeft / (S.targetValue * 60));
+    updateRing(pct);
+    document.getElementById('progress-value').textContent =
+      Math.max(0, Math.ceil(S.gymSecondsLeft / 60)).toString();
+
+    if (S.gymSecondsLeft <= 0) {
+      clearInterval(S.gymInterval);
+      completeActivity();
+    }
+  }, 1000);
+}
+
+// ────────────────────────────────────────────────
+// UI HELPERS
+// ────────────────────────────────────────────────
+function navigateTo(screenName) {
+  document.querySelectorAll('.screen').forEach(s => s.classList.remove('active'));
+  document.getElementById(`screen-${screenName}`).classList.add('active');
+  S.currentScreen = screenName;
+}
+
+function updateRing(pct) {
+  const offset = CIRCUMFERENCE * (1 - Math.min(pct, 1));
+  document.getElementById('progress-ring').style.strokeDashoffset = offset;
+}
+
+function showToast(msg, duration = 3000) {
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), duration);
+}
+
+function setSoundIndicator(paused) {
+  const el = document.getElementById('sound-indicator');
+  if (paused) {
+    el.classList.add('paused');
+    el.innerHTML = '<div class="sound-dot"></div><span>Sound Paused</span>';
+    document.getElementById('btn-pause-sound-active').textContent = '🔔 Resume Sound';
+  } else {
+    el.classList.remove('paused');
+    el.innerHTML = '<div class="sound-dot"></div><span>Alarm Active</span>';
+    document.getElementById('btn-pause-sound-active').textContent = '🔇 Pause Alarm Sound';
+  }
+}
+
+function formatTime(ms) {
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  const h = Math.floor(m / 60);
+  if (h > 0) return `${h}h ${m % 60}m`;
+  return `${m}m ${s % 60}s`;
+}
+
+// ────────────────────────────────────────────────
+// CORE FLOWS
+// ────────────────────────────────────────────────
+function triggerAlarm() {
+  Audio.start();
+  const meta = ACTIVITY_META[S.activityType];
+  const goalText = S.activityType === 'gym'
+    ? `${S.targetValue} min ${meta.label} — Let's go!`
+    : `${S.targetValue.toFixed(1)} ${meta.unit} ${meta.label} — Let's go!`;
+  document.getElementById('alarming-goal-text').textContent = goalText;
+  navigateTo('alarming');
+
+  Motion.start(() => {
+    if (Audio.isMuted) {
+      Audio.resumeSound();
+      setSoundIndicator(false);
+      showToast('Inactivity detected — alarm resumed');
+    }
+  });
+}
+
+function startActivity() {
+  S.alarmSoundPaused = false;
+  const meta = ACTIVITY_META[S.activityType];
+
+  document.getElementById('active-icon').textContent = meta.icon;
+  document.getElementById('active-title').textContent = `${meta.label}ing`;
+  document.getElementById('progress-unit').textContent = meta.unit;
+  document.getElementById('stat-pace-label').textContent = meta.paceLabel;
+  updateRing(0);
+  setSoundIndicator(false);
+
+  if (S.activityType === 'gym') {
+    document.getElementById('progress-target').textContent = `of ${S.targetValue} min`;
+    document.getElementById('progress-value').textContent = S.targetValue.toString();
+  } else {
+    document.getElementById('progress-target').textContent = `of ${S.targetValue.toFixed(1)} km`;
+    document.getElementById('progress-value').textContent = '0.0';
+    GPS.start(dist => {
+      const d = Math.min(dist, S.targetValue);
+      document.getElementById('progress-value').textContent = d.toFixed(2);
+      updateRing(d / S.targetValue);
+      if (dist >= S.targetValue) completeActivity();
+    });
+  }
+
+  requestWakeLock();
+  navigateTo('active');
+
+  if (S.activityType === 'gym') {
+    startGymTimer();
+  } else {
+    startElapsedTimer();
+  }
+}
+
+function completeActivity() {
+  Audio.stop();
+  GPS.stop();
+  Motion.stop();
+  releaseWakeLock();
+  clearInterval(S.elapsedInterval);
+  clearInterval(S.gymInterval);
+
+  const elapsed = S.activityStartTime ? Date.now() - S.activityStartTime : 0;
+  const meta = ACTIVITY_META[S.activityType];
+
+  if (S.activityType === 'gym') {
+    document.getElementById('complete-distance').textContent = S.targetValue;
+    document.getElementById('complete-dist-label').textContent = 'min';
+    document.getElementById('complete-sub').textContent = `${S.targetValue} min ${meta.label} session done!`;
+  } else {
+    const dist = S.currentDistance > 0 ? S.currentDistance : S.targetValue;
+    document.getElementById('complete-distance').textContent = dist.toFixed(2);
+    document.getElementById('complete-dist-label').textContent = 'km';
+    document.getElementById('complete-sub').textContent = `${dist.toFixed(2)} km ${meta.label} complete!`;
+  }
+  document.getElementById('complete-time').textContent = formatTime(elapsed);
+
+  navigateTo('complete');
+}
+
+function resetToSetup() {
+  Audio.stop();
+  GPS.stop();
+  Motion.stop();
+  Scheduler.stop();
+  releaseWakeLock();
+  clearInterval(S.elapsedInterval);
+  clearInterval(S.gymInterval);
+  S.currentDistance = 0;
+  S.lastPosition = null;
+  S.activityStartTime = null;
+  S.alarmSoundPaused = false;
+
+  // Restore form
+  document.querySelectorAll('.activity-btn').forEach(b => {
+    b.classList.toggle('selected', b.dataset.activity === S.activityType);
+  });
+  document.getElementById('target-input').value = S.targetValue;
+  document.getElementById('alarm-time-input').value = S.alarmTime;
+  updateTargetLabel();
+
+  navigateTo('setup');
+}
+
+function updateTargetLabel() {
+  const isGym = S.activityType === 'gym';
+  document.getElementById('target-label').textContent =
+    isGym ? 'Duration Goal (minutes)' : 'Distance Goal (km)';
+  document.getElementById('target-input').placeholder = isGym ? '30' : '5';
+  document.getElementById('target-input').step = isGym ? '1' : '0.1';
+}
+
+// ────────────────────────────────────────────────
+// EVENT HANDLERS
+// ────────────────────────────────────────────────
+
+// Activity type buttons
+document.querySelectorAll('.activity-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.activity-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    S.activityType = btn.dataset.activity;
+    updateTargetLabel();
+  });
+});
+
+// Set Alarm
+document.getElementById('btn-set-alarm').addEventListener('click', async () => {
+  const targetVal = parseFloat(document.getElementById('target-input').value);
+  const timeVal   = document.getElementById('alarm-time-input').value;
+
+  if (!targetVal || targetVal <= 0) {
+    showToast('Please enter a valid goal');
+    return;
+  }
+  if (!timeVal) {
+    showToast('Please set an alarm time');
+    return;
+  }
+
+  S.targetValue = targetVal;
+  S.alarmTime   = timeVal;
+  Storage.save();
+
+  // IMPORTANT: init AudioContext on this user gesture
+  Audio.init();
+  await Audio.resume();
+
+  // Update standby UI
+  const meta = ACTIVITY_META[S.activityType];
+  document.getElementById('standby-alarm-time').textContent = timeVal;
+  document.getElementById('standby-icon').textContent = meta.icon;
+  document.getElementById('standby-goal-text').textContent =
+    S.activityType === 'gym'
+      ? `${targetVal} min ${meta.label}`
+      : `${targetVal.toFixed(1)} ${meta.unit} ${meta.label}`;
+
+  navigateTo('standby');
+  Scheduler.start();
+});
+
+// Edit alarm
+document.getElementById('btn-edit-alarm').addEventListener('click', () => {
+  Scheduler.stop();
+  resetToSetup();
+});
+
+// Alarming screen — Pause Sound
+document.getElementById('btn-pause-sound-alarm').addEventListener('click', async () => {
+  await Audio.resume();
+  Audio.pauseSound();
+  showToast('Sound paused — start moving!');
+});
+
+// Alarming screen — Start Activity
+document.getElementById('btn-start-activity').addEventListener('click', async () => {
+  await Audio.resume();
+  startActivity();
+});
+
+// Active screen — Pause/Resume Sound
+document.getElementById('btn-pause-sound-active').addEventListener('click', async () => {
+  await Audio.resume();
+  if (Audio.isMuted) {
+    Audio.resumeSound();
+    setSoundIndicator(false);
+    showToast('Alarm sound resumed');
+  } else {
+    Audio.pauseSound();
+    setSoundIndicator(true);
+    S.lastMotionTime = Date.now(); // reset inactivity clock
+    showToast('Sound paused — keep moving!');
+  }
+});
+
+// Active screen — Mark Complete
+document.getElementById('btn-complete').addEventListener('click', () => {
+  completeActivity();
+});
+
+// Complete screen — New Alarm
+document.getElementById('btn-new-alarm').addEventListener('click', () => {
+  resetToSetup();
+});
+
+// Page visibility: resume alarm if hidden and sound was paused
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && Audio.isMuted && Audio.isRunning) {
+    Audio.resumeSound();
+    setSoundIndicator(false);
+    showToast('Screen hidden — alarm resumed');
+  }
+});
+
+// Re-acquire wake lock on visibility change
+document.addEventListener('visibilitychange', async () => {
+  if (!document.hidden && S.currentScreen === 'active' && !S.wakeLock) {
+    await requestWakeLock();
+  }
+});
+
+// ────────────────────────────────────────────────
+// BOOT
+// ────────────────────────────────────────────────
+document.addEventListener('DOMContentLoaded', () => {
+  Storage.load();
+
+  // Restore form from saved config
+  document.querySelectorAll('.activity-btn').forEach(b => {
+    b.classList.toggle('selected', b.dataset.activity === S.activityType);
+  });
+  document.getElementById('target-input').value = S.targetValue;
+  document.getElementById('alarm-time-input').value = S.alarmTime;
+  updateTargetLabel();
+
+  // If alarm time is set and in the future, jump to standby
+  const meta = ACTIVITY_META[S.activityType];
+  const now = new Date();
+  const [h, m] = S.alarmTime.split(':').map(Number);
+  const alarmDate = new Date(now);
+  alarmDate.setHours(h, m, 0, 0);
+  if (alarmDate <= now) alarmDate.setDate(alarmDate.getDate() + 1);
+
+  // Only auto-restore standby if within 12 hours
+  if (localStorage.getItem('fitalarm') && (alarmDate - now) < 12 * 3600 * 1000) {
+    document.getElementById('standby-alarm-time').textContent = S.alarmTime;
+    document.getElementById('standby-icon').textContent = meta.icon;
+    document.getElementById('standby-goal-text').textContent =
+      S.activityType === 'gym'
+        ? `${S.targetValue} min ${meta.label}`
+        : `${S.targetValue.toFixed(1)} ${meta.unit} ${meta.label}`;
+    navigateTo('standby');
+    Scheduler.start();
+  }
+});
+</script>
+</body>
+</html>
