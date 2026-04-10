@@ -1,7 +1,7 @@
 <div align="center">
 
 ![](https://img.shields.io/badge/StellarPH_x_KMC-Claude_AI_Workshop-7B2FBE?style=for-the-badge)
-![](https://img.shields.io/badge/Pod_C-5_Members-F5A623?style=for-the-badge)
+![](https://img.shields.io/badge/Pod_C-6_Members-F5A623?style=for-the-badge)
 
 # Pod C
 
@@ -15,13 +15,14 @@
 
 | Name | Role | Claude Access | Computer |
 |------|------|--------------|----------|
-| Hannah Athena Estrera | **Leader** | Subscription | Mac |
-| Rome Nicolas | | Subscription | Mac |
-| Mark Jayson Agao | | Experienced | Windows |
-| Michael Ian Rule | | Learning | Mac |
-| Earl Ceniza | | Learning | Windows |
+| Pierce Borinaga | **Leader** | Subscription | Mac |
+| Lysander Uy |  | Subscription | Windows |
+| Divino Franco R. Aurellanl |  | Experienced | Windows |
+| Precious Grace D. Manucom |  | Experienced | Windows |
+| Arnold Nico G. Ome |  | Experienced | Windows |
+| Christian C. Barral |  | Learning | Windows |
 
-**Pod Leader: Hannah Athena Estrera** - keeps the team moving, calls votes when stuck, makes sure everyone has a role.
+**Pod Leader: Pierce Borinaga** - keeps the team moving, calls votes when stuck, makes sure everyone has a role.
 
 ---
 
@@ -52,7 +53,7 @@ If you're using Claude Code, just say: *"push my work to our pod repo"* and it h
 
 ## Resources
 
-- **Main workshop hub** (guides, prompts, all tools) - https://github.com/arc-web/stellarph-claude-workshop
+- **Main workshop hub** - https://github.com/arc-web/stellarph-claude-workshop
 - **All tools for today** - https://github.com/arc-web/stellarph-claude-workshop/blob/main/guides/tools.md
 - **Discord - Pod C channel** - https://discord.gg/g2pJzjmV
 - **Your build notes** - [notes.md](notes.md)

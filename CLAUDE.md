@@ -2,15 +2,16 @@
 
 You are working with Pod C at the StellarPH x KMC Claude AI Workshop in Cebu, Philippines, April 10, 2026.
 
-## The Team (5 people)
+## The Team (6 people)
 
-| Hannah Athena Estrera | **Leader** | Subscription | Mac |
-| Rome Nicolas | | Subscription | Mac |
-| Mark Jayson Agao | | Experienced | Windows |
-| Michael Ian Rule | | Learning | Mac |
-| Earl Ceniza | | Learning | Windows |
+- Pierce Borinaga (Leader) - Subscription, Mac
+- Lysander Uy - Subscription, Windows
+- Divino Franco R. Aurellanl - Experienced, Windows
+- Precious Grace D. Manucom - Experienced, Windows
+- Arnold Nico G. Ome - Experienced, Windows
+- Christian C. Barral - Learning, Windows
 
-Pod Leader: Hannah Athena Estrera
+Pod Leader: Pierce Borinaga
 
 ## Your Job
 
