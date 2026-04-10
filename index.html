@@ -25,6 +25,19 @@
       --radius-sm: 10px;
     }
 
+    html.light {
+      --bg: #f4f4f8;
+      --surface: #ffffff;
+      --border: #dcdce8;
+      --accent: #00a85a;
+      --accent-dim: #008f4c;
+      --danger: #e02040;
+      --danger-dim: #b81a34;
+      --warn: #d48000;
+      --text: #0f0f1a;
+      --text-muted: #6b6b88;
+    }
+
     html, body {
       height: 100%;
       background: var(--bg);
@@ -462,6 +475,26 @@
     }
     #toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
 
+    /* ─── THEME TOGGLE ─── */
+    #theme-toggle {
+      margin-left: auto;
+      background: var(--surface);
+      border: 1.5px solid var(--border);
+      border-radius: 99px;
+      padding: 6px 14px;
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-muted);
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      transition: border-color 0.2s, color 0.2s;
+      -webkit-tap-highlight-color: transparent;
+      white-space: nowrap;
+    }
+    #theme-toggle:hover { border-color: var(--accent); color: var(--accent); }
+
     /* Scrollbar */
     ::-webkit-scrollbar { width: 0; }
   </style>
@@ -474,6 +507,7 @@
     <div class="screen-header">
       <span class="logo-icon">⚡</span>
       <span class="screen-title">FitAlarm</span>
+      <button id="theme-toggle">🌙 Dark</button>
     </div>
 
     <div class="gap-20" style="margin-top: 12px; flex: 1;">
@@ -526,7 +560,10 @@
     </div>
     <p class="countdown-label">Starts In</p>
     <p id="countdown-display">00:00:00</p>
-    <button class="btn btn-outline edit-btn" id="btn-edit-alarm">✏️ Edit Alarm</button>
+    <div style="display:flex;gap:10px;margin-top:48px;width:100%;max-width:320px;">
+      <button class="btn btn-outline edit-btn" id="btn-edit-alarm" style="margin-top:0;flex:1;">✏️ Edit</button>
+      <button class="btn btn-warn btn-sm" id="btn-test-alarm" style="flex:1;">🔔 Test Now</button>
+    </div>
   </div>
 
   <!-- ══════════════ ALARMING SCREEN ══════════════ -->
@@ -568,6 +605,7 @@
     </div>
 
     <p class="progress-target" id="progress-target">of 5.0 km</p>
+    <p id="gps-status" style="font-size:12px;color:var(--text-muted);margin-bottom:8px;display:none;">📡 Acquiring GPS signal...</p>
 
     <div class="stats-row">
       <div class="stat-card">
@@ -588,8 +626,8 @@
 
   <!-- ══════════════ COMPLETE SCREEN ══════════════ -->
   <div class="screen" id="screen-complete">
-    <div class="confetti-wrap">🎉</div>
-    <p class="complete-title">Goal Complete!</p>
+    <div class="confetti-wrap" id="complete-emoji">🎉</div>
+    <p class="complete-title" id="complete-title">Goal Complete!</p>
     <p class="complete-sub" id="complete-sub">You crushed it!</p>
     <div class="complete-stats">
       <div class="complete-stat">
@@ -600,7 +638,23 @@
         <span class="complete-stat-value" id="complete-time">—</span>
         <span class="complete-stat-label">Time</span>
       </div>
+      <div class="complete-stat" id="complete-pace-wrap">
+        <span class="complete-stat-value" id="complete-pace">—</span>
+        <span class="complete-stat-label" id="complete-pace-label">min/km</span>
+      </div>
     </div>
+    <div id="complete-badge" style="
+      background:rgba(0,255,136,0.08);
+      border:1px solid var(--accent);
+      border-radius:var(--radius);
+      padding:14px 20px;
+      font-size:14px;
+      color:var(--accent);
+      font-weight:600;
+      margin-bottom:28px;
+      max-width:320px;
+      text-align:center;
+    "></div>
     <button class="btn btn-primary" id="btn-new-alarm" style="max-width:320px;">⚡ Set New Alarm</button>
   </div>
 
@@ -621,10 +675,10 @@ const GPS_MIN_DISTANCE_M = 5;           // ignore GPS jumps < 5m
 const GPS_MAX_ACCURACY_M = 40;          // ignore positions with accuracy > 40m
 
 const ACTIVITY_META = {
-  run:     { icon: '🏃', label: 'Run',     unit: 'km', paceLabel: 'min/km' },
-  walk:    { icon: '🚶', label: 'Walk',    unit: 'km', paceLabel: 'min/km' },
-  cycling: { icon: '🚴', label: 'Cycling', unit: 'km', paceLabel: 'km/h'   },
-  gym:     { icon: '🏋️', label: 'Gym',    unit: 'min', paceLabel: 'Remaining' },
+  run:     { icon: '🏃', label: 'Run',     activeLabel: 'Running',     unit: 'km',  paceLabel: 'min/km' },
+  walk:    { icon: '🚶', label: 'Walk',    activeLabel: 'Walking',     unit: 'km',  paceLabel: 'min/km' },
+  cycling: { icon: '🚴', label: 'Cycling', activeLabel: 'Cycling',     unit: 'km',  paceLabel: 'km/h'   },
+  gym:     { icon: '🏋️', label: 'Gym',    activeLabel: 'Gym Session', unit: 'min', paceLabel: 'Remaining' },
 };
 
 // ────────────────────────────────────────────────
@@ -797,13 +851,16 @@ const GPS = {
     this.onUpdate = callback;
     S.currentDistance = 0;
     S.lastPosition = null;
+    const statusEl = document.getElementById('gps-status');
+    if (statusEl) { statusEl.style.display = 'block'; statusEl.textContent = '📡 Acquiring GPS signal...'; }
     if (!navigator.geolocation) {
-      showToast('GPS not available in this browser');
+      showToast('GPS not available — distance won\'t track');
+      if (statusEl) { statusEl.textContent = '⚠️ GPS not available in this browser'; }
       return;
     }
     S.watchId = navigator.geolocation.watchPosition(
-      pos => this._onPos(pos),
-      err => this._onErr(err),
+      pos => this._onPos(pos, statusEl),
+      err => this._onErr(err, statusEl),
       { enableHighAccuracy: true, maximumAge: 0, timeout: 10000 }
     );
   },
@@ -825,9 +882,17 @@ const GPS = {
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
   },
 
-  _onPos(pos) {
+  _onPos(pos, statusEl) {
     const { latitude: lat, longitude: lon, accuracy } = pos.coords;
-    if (accuracy > GPS_MAX_ACCURACY_M) return; // too inaccurate
+    if (statusEl && statusEl.style.display !== 'none') {
+      if (accuracy > GPS_MAX_ACCURACY_M) {
+        statusEl.textContent = `📡 Improving accuracy (±${Math.round(accuracy)}m)...`;
+      } else {
+        statusEl.textContent = `✅ GPS locked (±${Math.round(accuracy)}m)`;
+        setTimeout(() => { statusEl.style.display = 'none'; }, 2000);
+      }
+    }
+    if (accuracy > GPS_MAX_ACCURACY_M) return;
     if (S.lastPosition) {
       const { lat: prevLat, lon: prevLon } = S.lastPosition;
       const dist = this._haversine(prevLat, prevLon, lat, lon);
@@ -841,9 +906,12 @@ const GPS = {
     }
   },
 
-  _onErr(err) {
+  _onErr(err, statusEl) {
     if (err.code === err.PERMISSION_DENIED) {
       showToast('GPS permission denied — distance won\'t track');
+      if (statusEl) { statusEl.textContent = '❌ GPS permission denied'; }
+    } else {
+      if (statusEl) { statusEl.textContent = '⚠️ GPS unavailable — move to open area'; }
     }
   },
 };
@@ -1088,7 +1156,7 @@ function startActivity() {
   const meta = ACTIVITY_META[S.activityType];
 
   document.getElementById('active-icon').textContent = meta.icon;
-  document.getElementById('active-title').textContent = `${meta.label}ing`;
+  document.getElementById('active-title').textContent = meta.activeLabel;
   document.getElementById('progress-unit').textContent = meta.unit;
   document.getElementById('stat-pace-label').textContent = meta.paceLabel;
   updateRing(0);
@@ -1127,19 +1195,51 @@ function completeActivity() {
   clearInterval(S.gymInterval);
 
   const elapsed = S.activityStartTime ? Date.now() - S.activityStartTime : 0;
+  const elapsedSec = Math.floor(elapsed / 1000);
   const meta = ACTIVITY_META[S.activityType];
 
+  document.getElementById('complete-title').textContent = 'Goal Complete!';
+  document.getElementById('complete-time').textContent = formatTime(elapsed);
+
+  const paceWrap = document.getElementById('complete-pace-wrap');
+
   if (S.activityType === 'gym') {
+    document.getElementById('complete-emoji').textContent = '🏋️';
     document.getElementById('complete-distance').textContent = S.targetValue;
     document.getElementById('complete-dist-label').textContent = 'min';
-    document.getElementById('complete-sub').textContent = `${S.targetValue} min ${meta.label} session done!`;
+    document.getElementById('complete-sub').textContent = `${S.targetValue} min Gym session done!`;
+    document.getElementById('complete-badge').textContent = '💪 Strength built. Consistency is everything.';
+    paceWrap.style.display = 'none';
   } else {
     const dist = S.currentDistance > 0 ? S.currentDistance : S.targetValue;
+    document.getElementById('complete-emoji').textContent = meta.icon;
     document.getElementById('complete-distance').textContent = dist.toFixed(2);
     document.getElementById('complete-dist-label').textContent = 'km';
     document.getElementById('complete-sub').textContent = `${dist.toFixed(2)} km ${meta.label} complete!`;
+    paceWrap.style.display = 'flex';
+
+    // Pace
+    const elapsedMin = elapsedSec / 60;
+    if (S.activityType === 'cycling' && dist > 0) {
+      const kmh = (dist / (elapsedSec / 3600)).toFixed(1);
+      document.getElementById('complete-pace').textContent = kmh;
+      document.getElementById('complete-pace-label').textContent = 'km/h';
+    } else if (dist > 0) {
+      const pace = (elapsedMin / dist).toFixed(1);
+      document.getElementById('complete-pace').textContent = pace;
+      document.getElementById('complete-pace-label').textContent = 'min/km';
+    } else {
+      paceWrap.style.display = 'none';
+    }
+
+    // Motivational badge
+    const badges = {
+      run:     '🔥 You ran it. Most people stayed on the couch.',
+      walk:    '🚶 Every step counts. Keep showing up.',
+      cycling: '🚴 Pedal by pedal, you got it done.',
+    };
+    document.getElementById('complete-badge').textContent = badges[S.activityType] || '🎯 Goal achieved!';
   }
-  document.getElementById('complete-time').textContent = formatTime(elapsed);
 
   navigateTo('complete');
 }
@@ -1231,6 +1331,14 @@ document.getElementById('btn-edit-alarm').addEventListener('click', () => {
   resetToSetup();
 });
 
+// Test alarm now (demo helper)
+document.getElementById('btn-test-alarm').addEventListener('click', async () => {
+  Scheduler.stop();
+  Audio.init();
+  await Audio.resume();
+  triggerAlarm();
+});
+
 // Alarming screen — Pause Sound
 document.getElementById('btn-pause-sound-alarm').addEventListener('click', async () => {
   await Audio.resume();
@@ -1286,9 +1394,38 @@ document.addEventListener('visibilitychange', async () => {
 });
 
 // ────────────────────────────────────────────────
+// THEME TOGGLE
+// ────────────────────────────────────────────────
+const Theme = {
+  init() {
+    const saved = localStorage.getItem('fitalarm-theme') || 'dark';
+    this.apply(saved);
+  },
+  apply(mode) {
+    const btn = document.getElementById('theme-toggle');
+    if (mode === 'light') {
+      document.documentElement.classList.add('light');
+      btn.textContent = '🌙 Dark';
+      localStorage.setItem('fitalarm-theme', 'light');
+    } else {
+      document.documentElement.classList.remove('light');
+      btn.textContent = '☀️ Light';
+      localStorage.setItem('fitalarm-theme', 'dark');
+    }
+  },
+  toggle() {
+    const isLight = document.documentElement.classList.contains('light');
+    this.apply(isLight ? 'dark' : 'light');
+  },
+};
+
+document.getElementById('theme-toggle').addEventListener('click', () => Theme.toggle());
+
+// ────────────────────────────────────────────────
 // BOOT
 // ────────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  Theme.init();
   Storage.load();
 
   // Restore form from saved config
