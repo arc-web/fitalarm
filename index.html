@@ -5,538 +5,379 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
-  <meta name="theme-color" content="#0a0a0f" />
+  <meta name="theme-color" content="#0c0c0c" />
   <title>FitAlarm</title>
   <!-- Pose detection — loaded lazily when camera activities are selected -->
   <script id="tf-script" data-src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs-core@4.2.0/dist/tf-core.min.js"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
     :root {
-      --bg: #0a0a0f;
-      --surface: #13131a;
-      --border: #2a2a3a;
-      --accent: #00ff88;
-      --accent-dim: #00cc6a;
-      --danger: #ff3b5c;
-      --danger-dim: #cc2d48;
-      --warn: #ffaa00;
-      --text: #e8e8f0;
-      --text-muted: #7a7a9a;
-      --radius: 16px;
-      --radius-sm: 10px;
+      --bg:            #0c0c0c;
+      --bg2:           #111111;
+      --surface:       #1a1a1a;
+      --surface2:      #222222;
+      --border:        rgba(255,255,255,0.07);
+      --border-strong: rgba(255,255,255,0.13);
+      --accent:        #00e87a;
+      --accent-dim:    rgba(0,232,122,0.10);
+      --accent-glow:   rgba(0,232,122,0.22);
+      --danger:        #ff3b5c;
+      --danger-dim:    rgba(255,59,92,0.10);
+      --warn:          #ffaa00;
+      --warn-dim:      rgba(255,170,0,0.10);
+      --text:          #ffffff;
+      --text-2:        rgba(255,255,255,0.60);
+      --text-muted:    rgba(255,255,255,0.32);
+      --radius:        22px;
+      --radius-sm:     14px;
+      --radius-pill:   100px;
+      --shadow-sm:     0 1px 4px rgba(0,0,0,0.45);
+      --shadow-md:     0 4px 20px rgba(0,0,0,0.40);
+      --shadow-lg:     0 12px 40px rgba(0,0,0,0.55);
     }
 
     html.light {
-      --bg: #f4f4f8;
-      --surface: #ffffff;
-      --border: #dcdce8;
-      --accent: #00a85a;
-      --accent-dim: #008f4c;
-      --danger: #e02040;
-      --danger-dim: #b81a34;
-      --warn: #d48000;
-      --text: #0f0f1a;
-      --text-muted: #6b6b88;
+      --bg:            #f0f0f5;
+      --bg2:           #fafafd;
+      --surface:       #ffffff;
+      --surface2:      #f5f5fa;
+      --border:        rgba(0,0,0,0.06);
+      --border-strong: rgba(0,0,0,0.11);
+      --accent:        #00b865;
+      --accent-dim:    rgba(0,184,101,0.10);
+      --accent-glow:   rgba(0,184,101,0.18);
+      --danger:        #e0203f;
+      --danger-dim:    rgba(224,32,63,0.08);
+      --warn:          #c87800;
+      --warn-dim:      rgba(200,120,0,0.08);
+      --text:          #0a0a0a;
+      --text-2:        rgba(0,0,0,0.52);
+      --text-muted:    rgba(0,0,0,0.30);
+      --shadow-sm:     0 1px 4px rgba(0,0,0,0.07);
+      --shadow-md:     0 4px 20px rgba(0,0,0,0.09);
+      --shadow-lg:     0 12px 40px rgba(0,0,0,0.13);
     }
 
     html, body {
       height: 100%;
       background: var(--bg);
       color: var(--text);
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
       -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
       overflow: hidden;
     }
 
-    #app {
-      position: relative;
-      width: 100%;
-      height: 100dvh;
-    }
+    #app { position: relative; width: 100%; height: 100dvh; }
 
     .screen {
       display: none;
       position: absolute;
       inset: 0;
-      padding: env(safe-area-inset-top, 20px) 24px env(safe-area-inset-bottom, 20px);
+      padding: env(safe-area-inset-top, 20px) 24px env(safe-area-inset-bottom, 28px);
       overflow-y: auto;
       flex-direction: column;
     }
     .screen.active { display: flex; }
 
-    /* ─── SHARED COMPONENTS ─── */
+    /* ─── SHARED ─── */
     .screen-header {
       display: flex;
       align-items: center;
-      gap: 12px;
-      padding: 16px 0 8px;
+      gap: 10px;
+      padding: 10px 0 18px;
     }
     .screen-title {
-      font-size: 22px;
-      font-weight: 700;
-      letter-spacing: -0.5px;
-    }
-    .logo-icon { font-size: 26px; }
-
-    .btn {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      width: 100%;
-      padding: 18px 24px;
-      border-radius: var(--radius);
-      border: none;
       font-size: 17px;
-      font-weight: 600;
-      cursor: pointer;
-      transition: transform 0.1s, opacity 0.1s;
-      -webkit-tap-highlight-color: transparent;
-      min-height: 58px;
-    }
-    .btn:active { transform: scale(0.97); opacity: 0.85; }
-    .btn-primary { background: var(--accent); color: #000; }
-    .btn-danger  { background: var(--danger); color: #fff; }
-    .btn-warn    { background: var(--warn); color: #000; }
-    .btn-outline {
-      background: transparent;
-      border: 2px solid var(--border);
+      font-weight: 700;
+      letter-spacing: -0.2px;
       color: var(--text);
     }
-    .btn-ghost {
-      background: var(--surface);
-      color: var(--text);
-    }
-    .btn-sm {
-      font-size: 15px;
-      padding: 14px 20px;
-      min-height: 48px;
-    }
-
-    .card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius);
-      padding: 20px;
-    }
-
-    label {
-      display: block;
-      font-size: 13px;
-      font-weight: 600;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 0.8px;
-      margin-bottom: 8px;
-    }
-
-    input[type="number"], input[type="time"] {
-      width: 100%;
-      background: var(--bg);
-      border: 1.5px solid var(--border);
-      border-radius: var(--radius-sm);
-      color: var(--text);
-      font-size: 20px;
-      font-weight: 600;
-      padding: 14px 16px;
-      outline: none;
-      transition: border-color 0.2s;
-      -webkit-appearance: none;
-      appearance: none;
-    }
-    input[type="number"]:focus,
-    input[type="time"]:focus { border-color: var(--accent); }
-    input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(1); opacity: 0.4; }
-
+    .logo-icon { font-size: 22px; }
     .spacer { flex: 1; }
     .gap-12 { display: flex; flex-direction: column; gap: 12px; }
     .gap-16 { display: flex; flex-direction: column; gap: 16px; }
     .gap-20 { display: flex; flex-direction: column; gap: 20px; }
 
-    /* ─── SETUP SCREEN ─── */
-    #screen-setup .activity-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-    }
-    .activity-btn {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      gap: 6px;
-      padding: 16px 8px;
-      background: var(--bg);
-      border: 1.5px solid var(--border);
-      border-radius: var(--radius);
-      color: var(--text-muted);
-      font-size: 13px;
-      font-weight: 600;
+    /* ─── BUTTONS ─── */
+    .btn {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      width: 100%; height: 58px; padding: 0 28px;
+      border-radius: var(--radius-pill); border: none;
+      font-family: inherit; font-size: 15px; font-weight: 700; letter-spacing: -0.1px;
       cursor: pointer;
-      transition: border-color 0.2s, color 0.2s, background 0.2s;
+      transition: transform 0.12s ease, box-shadow 0.12s ease, opacity 0.12s ease;
       -webkit-tap-highlight-color: transparent;
     }
-    .activity-btn .icon { font-size: 28px; }
-    .activity-btn.selected {
+    .btn:active { transform: scale(0.96); opacity: 0.88; }
+    .btn-primary {
+      background: var(--accent); color: #000;
+      box-shadow: 0 4px 24px var(--accent-glow);
+    }
+    .btn-danger  { background: var(--danger); color: #fff; box-shadow: 0 4px 20px rgba(255,59,92,0.22); }
+    .btn-warn    { background: var(--warn); color: #000; }
+    .btn-outline {
+      background: transparent;
+      border: 1.5px solid var(--border-strong);
+      color: var(--text);
+    }
+    .btn-ghost { background: var(--surface); color: var(--text); box-shadow: var(--shadow-sm); }
+    .btn-sm    { height: 48px; font-size: 14px; }
+
+    /* ─── INPUTS ─── */
+    label {
+      display: block;
+      font-size: 11px; font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase; letter-spacing: 1.2px;
+      margin-bottom: 10px;
+    }
+    input[type="number"], input[type="time"] {
+      width: 100%;
+      background: var(--surface2);
+      border: 1.5px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      font-family: inherit; font-size: 22px; font-weight: 700; letter-spacing: -0.5px;
+      padding: 16px 18px; outline: none;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      -webkit-appearance: none; appearance: none;
+    }
+    input[type="number"]:focus, input[type="time"]:focus {
       border-color: var(--accent);
-      color: var(--accent);
-      background: rgba(0, 255, 136, 0.06);
+      box-shadow: 0 0 0 3px var(--accent-dim);
+    }
+    input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(0.5); }
+    html:not(.light) input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(1) opacity(0.35); }
+
+    /* ─── SETUP SCREEN ─── */
+    #screen-setup .activity-grid {
+      display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+    }
+    .activity-btn {
+      display: flex; flex-direction: column; align-items: center;
+      justify-content: center; gap: 8px;
+      padding: 20px 8px;
+      background: var(--surface); border: 1.5px solid var(--border);
+      border-radius: var(--radius);
+      color: var(--text-2);
+      font-family: inherit; font-size: 12px; font-weight: 700; letter-spacing: 0.3px;
+      cursor: pointer;
+      transition: all 0.18s ease;
+      -webkit-tap-highlight-color: transparent;
+      box-shadow: var(--shadow-sm);
+    }
+    .activity-btn .icon { font-size: 30px; line-height: 1; }
+    .activity-btn.selected {
+      border-color: var(--accent); color: var(--accent);
+      background: var(--accent-dim);
+      box-shadow: 0 0 0 1px var(--accent), 0 4px 20px var(--accent-glow);
     }
 
     /* ─── STANDBY SCREEN ─── */
     #screen-standby {
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      gap: 0;
+      align-items: center; justify-content: center; text-align: center; gap: 0;
     }
     #screen-standby .alarm-label {
-      font-size: 14px;
-      color: var(--text-muted);
-      font-weight: 600;
-      letter-spacing: 2px;
-      text-transform: uppercase;
-      margin-bottom: 12px;
+      font-size: 11px; color: var(--text-muted); font-weight: 700;
+      letter-spacing: 2.5px; text-transform: uppercase; margin-bottom: 16px;
     }
     #screen-standby .alarm-time-big {
-      font-size: 64px;
-      font-weight: 800;
-      letter-spacing: -3px;
-      color: var(--text);
-      margin-bottom: 4px;
+      font-size: 80px; font-weight: 900; letter-spacing: -5px;
+      color: var(--text); margin-bottom: 14px; line-height: 1;
     }
     #screen-standby .activity-badge {
-      display: inline-flex;
-      align-items: center;
-      gap: 6px;
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 99px;
-      padding: 6px 16px;
-      font-size: 14px;
-      color: var(--text-muted);
-      margin-bottom: 48px;
+      display: inline-flex; align-items: center; gap: 6px;
+      background: var(--surface); border: 1px solid var(--border-strong);
+      border-radius: var(--radius-pill);
+      padding: 8px 18px; font-size: 13px; font-weight: 600;
+      color: var(--text-2); margin-bottom: 52px;
+      box-shadow: var(--shadow-sm);
     }
     .countdown-label {
-      font-size: 13px;
-      color: var(--text-muted);
-      text-transform: uppercase;
-      letter-spacing: 1.5px;
-      margin-bottom: 8px;
+      font-size: 11px; color: var(--text-muted); font-weight: 700;
+      text-transform: uppercase; letter-spacing: 2px; margin-bottom: 10px;
     }
     #countdown-display {
-      font-size: 44px;
-      font-weight: 700;
-      color: var(--accent);
-      letter-spacing: -2px;
-      font-variant-numeric: tabular-nums;
-    }
-    #screen-standby .edit-btn {
-      margin-top: 48px;
-      width: auto;
-      padding: 12px 28px;
-      font-size: 14px;
+      font-size: 52px; font-weight: 800; color: var(--accent);
+      letter-spacing: -3px; font-variant-numeric: tabular-nums;
+      text-shadow: 0 0 48px var(--accent-glow);
     }
 
     /* ─── ALARMING SCREEN ─── */
     #screen-alarming {
-      background: var(--bg);
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      gap: 0;
+      background: var(--bg); align-items: center;
+      justify-content: center; text-align: center; gap: 0;
     }
     .alarm-pulse-ring {
-      position: relative;
-      width: 200px;
-      height: 200px;
-      margin: 0 auto 32px;
+      position: relative; width: 200px; height: 200px; margin: 0 auto 36px;
     }
-    .alarm-pulse-ring::before,
-    .alarm-pulse-ring::after {
-      content: '';
-      position: absolute;
-      inset: 0;
-      border-radius: 50%;
-      background: rgba(255, 59, 92, 0.15);
-      animation: pulse-ring 1.4s ease-out infinite;
+    .alarm-pulse-ring::before, .alarm-pulse-ring::after {
+      content: ''; position: absolute; inset: 0; border-radius: 50%;
+      background: rgba(255,59,92,0.10);
+      animation: pulse-ring 1.6s ease-out infinite;
     }
-    .alarm-pulse-ring::after { animation-delay: 0.7s; }
+    .alarm-pulse-ring::after { animation-delay: 0.8s; }
     .alarm-pulse-center {
-      position: absolute;
-      inset: 20px;
-      border-radius: 50%;
+      position: absolute; inset: 20px; border-radius: 50%;
       background: var(--danger);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 56px;
+      display: flex; align-items: center; justify-content: center; font-size: 52px;
+      box-shadow: 0 0 48px rgba(255,59,92,0.45);
       animation: pulse-center 1.4s ease-in-out infinite;
     }
     @keyframes pulse-ring {
-      0%   { transform: scale(0.8); opacity: 0.8; }
-      100% { transform: scale(1.4); opacity: 0; }
+      0%   { transform: scale(0.85); opacity: 0.7; }
+      100% { transform: scale(1.55); opacity: 0; }
     }
     @keyframes pulse-center {
-      0%, 100% { transform: scale(1); }
-      50%       { transform: scale(1.05); }
+      0%,100% { transform: scale(1);    box-shadow: 0 0 40px rgba(255,59,92,0.35); }
+      50%      { transform: scale(1.04); box-shadow: 0 0 64px rgba(255,59,92,0.65); }
     }
-    .alarm-title {
-      font-size: 28px;
-      font-weight: 800;
-      margin-bottom: 8px;
-    }
-    .alarm-subtitle {
-      font-size: 16px;
-      color: var(--text-muted);
-      margin-bottom: 40px;
-    }
-    #screen-alarming .actions {
-      width: 100%;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
+    .alarm-title   { font-size: 30px; font-weight: 800; letter-spacing: -0.5px; margin-bottom: 8px; }
+    .alarm-subtitle { font-size: 15px; color: var(--text-2); font-weight: 500; margin-bottom: 44px; }
+    #screen-alarming .actions { width: 100%; display: flex; flex-direction: column; gap: 12px; }
 
     /* ─── ACTIVE SCREEN ─── */
-    #screen-active {
-      align-items: center;
-      gap: 0;
-    }
+    #screen-active { align-items: center; gap: 0; }
     #screen-active .screen-header { width: 100%; }
     .progress-ring-wrap {
-      position: relative;
-      width: 220px;
-      height: 220px;
-      margin: 24px auto 16px;
+      position: relative; width: 220px; height: 220px; margin: 16px auto 10px;
     }
-    .progress-ring-wrap svg {
-      transform: rotate(-90deg);
-    }
-    .progress-ring-bg { fill: none; stroke: var(--border); stroke-width: 10; }
+    .progress-ring-wrap svg { transform: rotate(-90deg); }
+    .progress-ring-bg   { fill: none; stroke: var(--border-strong); stroke-width: 7; }
     .progress-ring-fill {
-      fill: none;
-      stroke: var(--accent);
-      stroke-width: 10;
-      stroke-linecap: round;
+      fill: none; stroke: var(--accent); stroke-width: 7; stroke-linecap: round;
       transition: stroke-dashoffset 1s linear;
+      filter: drop-shadow(0 0 8px var(--accent-glow));
     }
     .progress-center-text {
-      position: absolute;
-      inset: 0;
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
+      position: absolute; inset: 0;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
     }
     .progress-value {
-      font-size: 40px;
-      font-weight: 800;
-      letter-spacing: -2px;
-      color: var(--text);
+      font-size: 44px; font-weight: 800; letter-spacing: -2px; color: var(--text);
     }
     .progress-unit {
-      font-size: 14px;
-      color: var(--text-muted);
-      font-weight: 600;
+      font-size: 12px; color: var(--text-2); font-weight: 700;
+      letter-spacing: 1.5px; text-transform: uppercase; margin-top: 2px;
     }
-    .progress-target {
-      font-size: 13px;
-      color: var(--text-muted);
-      margin-bottom: 24px;
-    }
+    .progress-target { font-size: 12px; color: var(--text-muted); margin-bottom: 20px; font-weight: 500; }
     .stats-row {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 10px;
-      width: 100%;
-      margin-bottom: 20px;
+      display: grid; grid-template-columns: 1fr 1fr;
+      gap: 10px; width: 100%; margin-bottom: 18px;
     }
     .stat-card {
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: var(--radius-sm);
-      padding: 14px;
-      text-align: center;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius-sm); padding: 16px 12px;
+      text-align: center; box-shadow: var(--shadow-sm);
     }
     .stat-value {
-      font-size: 22px;
-      font-weight: 700;
-      color: var(--text);
-      font-variant-numeric: tabular-nums;
+      font-size: 22px; font-weight: 800; color: var(--text);
+      font-variant-numeric: tabular-nums; letter-spacing: -0.5px;
     }
     .stat-label {
-      font-size: 12px;
-      color: var(--text-muted);
-      font-weight: 600;
-      margin-top: 2px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
+      font-size: 10px; color: var(--text-muted); font-weight: 700;
+      margin-top: 4px; text-transform: uppercase; letter-spacing: 1px;
     }
     #screen-active .bottom-actions {
-      width: 100%;
-      display: flex;
-      flex-direction: column;
-      gap: 10px;
-      margin-top: auto;
+      width: 100%; display: flex; flex-direction: column; gap: 10px; margin-top: auto;
     }
     .sound-indicator {
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      background: rgba(255, 59, 92, 0.1);
-      border: 1px solid rgba(255, 59, 92, 0.3);
-      border-radius: 99px;
-      padding: 8px 16px;
-      font-size: 13px;
-      color: var(--danger);
-      font-weight: 600;
+      display: flex; align-items: center; gap: 6px;
+      background: var(--danger-dim); border: 1px solid rgba(255,59,92,0.18);
+      border-radius: var(--radius-pill); padding: 6px 14px;
+      font-size: 12px; color: var(--danger); font-weight: 700; letter-spacing: 0.2px;
     }
     .sound-indicator.paused {
-      background: rgba(255, 170, 0, 0.1);
-      border-color: rgba(255, 170, 0, 0.3);
-      color: var(--warn);
+      background: var(--warn-dim); border-color: rgba(255,170,0,0.2); color: var(--warn);
     }
     .sound-dot {
-      width: 8px; height: 8px;
-      border-radius: 50%;
-      background: currentColor;
-      animation: blink 1s infinite;
+      width: 6px; height: 6px; border-radius: 50%;
+      background: currentColor; animation: blink 1.2s infinite;
     }
-    .sound-indicator.paused .sound-dot { animation: none; }
-    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.2} }
+    .sound-indicator.paused .sound-dot { animation: none; opacity: 0.5; }
+    @keyframes blink { 0%,100%{opacity:1} 50%{opacity:0.15} }
 
     /* ─── COMPLETE SCREEN ─── */
     #screen-complete {
-      align-items: center;
-      justify-content: center;
-      text-align: center;
-      gap: 0;
-      overflow: hidden;
+      align-items: center; justify-content: center;
+      text-align: center; gap: 0; overflow: hidden;
     }
     .confetti-wrap {
-      font-size: 72px;
-      margin-bottom: 16px;
-      animation: pop-in 0.4s cubic-bezier(0.34,1.56,0.64,1) both;
+      font-size: 68px; margin-bottom: 20px;
+      animation: pop-in 0.5s cubic-bezier(0.34,1.56,0.64,1) both;
     }
     @keyframes pop-in {
-      from { transform: scale(0); opacity: 0; }
-      to   { transform: scale(1); opacity: 1; }
+      from { transform: scale(0) rotate(-12deg); opacity: 0; }
+      to   { transform: scale(1) rotate(0);      opacity: 1; }
     }
-    .complete-title {
-      font-size: 32px;
-      font-weight: 800;
-      margin-bottom: 8px;
-    }
-    .complete-sub {
-      font-size: 16px;
-      color: var(--text-muted);
-      margin-bottom: 32px;
-    }
+    .complete-title { font-size: 34px; font-weight: 900; letter-spacing: -1px; margin-bottom: 8px; }
+    .complete-sub   { font-size: 15px; color: var(--text-2); font-weight: 500; margin-bottom: 32px; }
     .complete-stats {
-      display: flex;
-      gap: 24px;
-      margin-bottom: 40px;
+      display: flex; gap: 0; width: 100%; max-width: 340px; margin-bottom: 24px;
+      background: var(--surface); border: 1px solid var(--border);
+      border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow-md);
     }
     .complete-stat {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
+      display: flex; flex-direction: column; align-items: center;
+      padding: 20px 12px; flex: 1;
     }
+    .complete-stat + .complete-stat { border-left: 1px solid var(--border); }
     .complete-stat-value {
-      font-size: 32px;
-      font-weight: 800;
-      color: var(--accent);
+      font-size: 26px; font-weight: 800; color: var(--accent); letter-spacing: -1px;
     }
     .complete-stat-label {
-      font-size: 13px;
-      color: var(--text-muted);
-      font-weight: 600;
+      font-size: 10px; color: var(--text-muted); font-weight: 700;
+      margin-top: 4px; text-transform: uppercase; letter-spacing: 1px;
     }
-    #screen-complete .btn { max-width: 320px; }
+    #screen-complete .btn { max-width: 340px; }
 
     /* ─── TOAST ─── */
     #toast {
       position: fixed;
-      bottom: calc(env(safe-area-inset-bottom, 20px) + 20px);
-      left: 50%;
+      bottom: calc(env(safe-area-inset-bottom, 20px) + 20px); left: 50%;
       transform: translateX(-50%) translateY(80px);
-      background: var(--surface);
-      border: 1px solid var(--border);
-      border-radius: 99px;
-      padding: 12px 20px;
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--text);
-      white-space: nowrap;
+      background: var(--surface2); border: 1px solid var(--border-strong);
+      border-radius: var(--radius-pill); padding: 11px 20px;
+      font-size: 13px; font-weight: 600; color: var(--text);
+      white-space: nowrap; box-shadow: var(--shadow-lg);
       transition: transform 0.3s cubic-bezier(0.34,1.56,0.64,1), opacity 0.3s;
-      opacity: 0;
-      pointer-events: none;
-      z-index: 999;
+      opacity: 0; pointer-events: none; z-index: 999;
     }
     #toast.show { transform: translateX(-50%) translateY(0); opacity: 1; }
 
     /* ─── THEME TOGGLE ─── */
     #theme-toggle {
-      margin-left: auto;
-      background: var(--surface);
-      border: 1.5px solid var(--border);
-      border-radius: 99px;
-      padding: 6px 14px;
-      font-size: 14px;
-      font-weight: 600;
-      color: var(--text-muted);
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      gap: 6px;
-      transition: border-color 0.2s, color 0.2s;
-      -webkit-tap-highlight-color: transparent;
-      white-space: nowrap;
+      background: var(--surface); border: 1.5px solid var(--border-strong);
+      border-radius: var(--radius-pill); padding: 6px 14px;
+      font-family: inherit; font-size: 12px; font-weight: 700;
+      color: var(--text-2); cursor: pointer;
+      display: flex; align-items: center; gap: 6px;
+      transition: all 0.2s; -webkit-tap-highlight-color: transparent; white-space: nowrap;
     }
     #theme-toggle:hover { border-color: var(--accent); color: var(--accent); }
 
     /* ─── END CONFIRMATION MODAL ─── */
     #end-modal-overlay {
-      display: none;
-      position: fixed;
-      inset: 0;
-      background: rgba(0,0,0,0.75);
-      backdrop-filter: blur(4px);
-      -webkit-backdrop-filter: blur(4px);
-      z-index: 100;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
+      display: none; position: fixed; inset: 0;
+      background: rgba(0,0,0,0.82);
+      backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
+      z-index: 100; align-items: center; justify-content: center; padding: 24px;
     }
     #end-modal-overlay.show { display: flex; }
     #end-modal {
-      background: var(--surface);
-      border: 1.5px solid var(--border);
-      border-radius: var(--radius);
-      padding: 32px 24px 24px;
-      width: 100%;
-      max-width: 340px;
-      text-align: center;
-      animation: pop-in 0.25s cubic-bezier(0.34,1.56,0.64,1) both;
+      background: var(--surface); border: 1px solid var(--border-strong);
+      border-radius: 28px; padding: 36px 28px 28px;
+      width: 100%; max-width: 340px; text-align: center;
+      box-shadow: var(--shadow-lg);
+      animation: pop-in 0.3s cubic-bezier(0.34,1.56,0.64,1) both;
     }
-    #end-modal-emoji {
-      font-size: 52px;
-      margin-bottom: 12px;
-      display: block;
-    }
-    #end-modal-msg {
-      font-size: 20px;
-      font-weight: 700;
-      color: var(--text);
-      margin-bottom: 24px;
-      line-height: 1.3;
-    }
-    #end-modal .modal-buttons {
-      display: flex;
-      gap: 10px;
-    }
+    #end-modal-emoji  { font-size: 52px; margin-bottom: 14px; display: block; }
+    #end-modal-msg    { font-size: 21px; font-weight: 800; letter-spacing: -0.5px; color: var(--text); margin-bottom: 28px; line-height: 1.3; }
+    #end-modal .modal-buttons { display: flex; gap: 10px; }
 
     /* Scrollbar */
     ::-webkit-scrollbar { width: 0; }
@@ -550,7 +391,7 @@
     <div class="screen-header">
       <span class="logo-icon">⚡</span>
       <span class="screen-title">FitAlarm</span>
-      <button id="btn-open-history" style="margin-left:auto;background:var(--surface);border:1.5px solid var(--border);border-radius:99px;padding:6px 12px;font-size:13px;font-weight:600;color:var(--text-muted);cursor:pointer;">📋 History</button>
+      <button id="btn-open-history" style="margin-left:auto;background:var(--surface);border:1.5px solid var(--border-strong);border-radius:var(--radius-pill);padding:6px 14px;font-family:inherit;font-size:12px;font-weight:700;color:var(--text-2);cursor:pointer;letter-spacing:0.2px;">📋 History</button>
       <button id="theme-toggle">🌙 Dark</button>
     </div>
 
@@ -593,20 +434,11 @@
 
     </div>
 
-    <div style="margin-top: 24px; padding-bottom: 8px; display:flex; flex-direction:column; gap:10px;">
-      <div style="
-        background: rgba(255,170,0,0.08);
-        border: 1px solid rgba(255,170,0,0.3);
-        border-radius: 12px;
-        padding: 10px 14px;
-        font-size: 13px;
-        color: var(--warn);
-        font-weight: 600;
-        text-align: center;
-      ">📵 Keep phone off silent mode for alarm to sound</div>
-      <button class="btn btn-primary" id="btn-set-alarm">
-        ⏰ Set Alarm
-      </button>
+    <div style="margin-top:28px;padding-bottom:4px;display:flex;flex-direction:column;gap:12px;">
+      <div style="background:var(--warn-dim);border:1px solid rgba(255,170,0,0.22);border-radius:var(--radius-pill);padding:10px 18px;font-size:12px;font-weight:700;color:var(--warn);text-align:center;letter-spacing:0.2px;">
+        📵 Keep phone off silent mode for alarm to sound
+      </div>
+      <button class="btn btn-primary" id="btn-set-alarm">Set Alarm</button>
     </div>
   </div>
 
@@ -620,22 +452,13 @@
     </div>
     <p class="countdown-label">Starts In</p>
     <p id="countdown-display">00:00:00</p>
-    <div style="display:flex;gap:10px;margin-top:48px;width:100%;max-width:320px;">
-      <button class="btn btn-outline edit-btn" id="btn-edit-alarm" style="margin-top:0;flex:1;">✏️ Edit</button>
+    <div style="display:flex;gap:10px;margin-top:52px;width:100%;max-width:320px;">
+      <button class="btn btn-outline btn-sm" id="btn-edit-alarm" style="flex:1;">✏️ Edit</button>
       <button class="btn btn-warn btn-sm" id="btn-test-alarm" style="flex:1;">🔔 Test Now</button>
     </div>
-    <div style="
-      margin-top: 20px;
-      background: rgba(255,170,0,0.08);
-      border: 1px solid rgba(255,170,0,0.3);
-      border-radius: 12px;
-      padding: 12px 16px;
-      font-size: 13px;
-      color: var(--warn);
-      font-weight: 600;
-      max-width: 320px;
-      text-align: center;
-    ">📵 Turn off Silent Mode so the alarm sounds</div>
+    <div style="margin-top:16px;background:var(--warn-dim);border:1px solid rgba(255,170,0,0.22);border-radius:var(--radius-pill);padding:10px 20px;font-size:12px;font-weight:700;color:var(--warn);max-width:320px;text-align:center;letter-spacing:0.2px;">
+      📵 Turn off Silent Mode so the alarm sounds
+    </div>
   </div>
 
   <!-- ══════════════ ALARMING SCREEN ══════════════ -->
@@ -715,18 +538,7 @@
         <span class="complete-stat-label" id="complete-pace-label">min/km</span>
       </div>
     </div>
-    <div id="complete-badge" style="
-      background:rgba(0,255,136,0.08);
-      border:1px solid var(--accent);
-      border-radius:var(--radius);
-      padding:14px 20px;
-      font-size:14px;
-      color:var(--accent);
-      font-weight:600;
-      margin-bottom:28px;
-      max-width:320px;
-      text-align:center;
-    "></div>
+    <div id="complete-badge" style="background:var(--accent-dim);border:1px solid rgba(0,232,122,0.22);border-radius:var(--radius-pill);padding:12px 20px;font-size:13px;color:var(--accent);font-weight:700;margin-bottom:28px;max-width:340px;text-align:center;letter-spacing:0.1px;"></div>
     <div style="display:flex;flex-direction:column;gap:10px;width:100%;max-width:320px;">
       <button class="btn btn-primary" id="btn-new-alarm">⚡ Set New Alarm</button>
       <button class="btn btn-outline btn-sm" id="btn-complete-history">📋 View History</button>
@@ -749,11 +561,14 @@
     <div style="position:relative;width:100%;aspect-ratio:4/3;border-radius:var(--radius);overflow:hidden;background:#000;flex-shrink:0;">
       <video id="pose-video" autoplay playsinline muted style="width:100%;height:100%;object-fit:cover;transform:scaleX(-1);"></video>
       <canvas id="pose-canvas" style="position:absolute;inset:0;width:100%;height:100%;transform:scaleX(-1);"></canvas>
+      <!-- Rep state badge: DOWN / UP -->
+      <div id="pose-state-badge" style="position:absolute;top:10px;left:10px;background:rgba(0,0,0,0.72);border-radius:10px;padding:6px 12px;font-size:13px;font-weight:700;color:#fff;display:none;"></div>
+      <!-- Status / inactivity warning -->
       <div id="pose-status" style="position:absolute;bottom:10px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.75);border-radius:99px;padding:6px 14px;font-size:12px;color:#fff;font-weight:600;white-space:nowrap;">⏳ Loading pose model...</div>
     </div>
 
     <div style="text-align:center;padding:12px 0 4px;">
-      <span style="font-size:56px;font-weight:800;color:var(--text);font-variant-numeric:tabular-nums;" id="camera-rep-count">0</span>
+      <span id="camera-rep-count" style="font-size:56px;font-weight:800;color:var(--text);font-variant-numeric:tabular-nums;display:inline-block;transition:transform 0.15s,color 0.15s;">0</span>
       <span style="font-size:20px;color:var(--text-muted);font-weight:600;"> / <span id="camera-rep-target">10</span></span>
       <div style="font-size:12px;color:var(--text-muted);font-weight:600;text-transform:uppercase;letter-spacing:1px;margin-top:2px;">Reps</div>
     </div>
@@ -781,7 +596,7 @@
       <span class="logo-icon">📋</span>
       <span class="screen-title">History</span>
       <div class="spacer"></div>
-      <button id="btn-close-history" style="background:var(--surface);border:1.5px solid var(--border);border-radius:99px;padding:6px 14px;font-size:13px;font-weight:600;color:var(--text-muted);cursor:pointer;">✕ Close</button>
+      <button id="btn-close-history" style="background:var(--surface);border:1.5px solid var(--border-strong);border-radius:var(--radius-pill);padding:6px 16px;font-family:inherit;font-size:12px;font-weight:700;color:var(--text-2);cursor:pointer;">✕ Close</button>
     </div>
     <div id="history-list" style="flex:1;overflow-y:auto;padding-bottom:20px;"></div>
   </div>
